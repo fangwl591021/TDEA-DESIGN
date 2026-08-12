@@ -12,12 +12,11 @@ test("內頁功能列移除返回首頁，並將返回首頁放在共用 Banner"
 
   assert.deepEqual(actions, [
     "cardCollection",
-    "card",
     "daily",
     "smartMatch",
     "calendar",
   ]);
-  assert.ok(menu.includes('data-home-action="cardCollection"><span>名片收藏</span></button><button data-home-action="card"><span>電子名片</span>'));
+  assert.ok(!menu.includes('data-home-action="card"'));
   assert.ok(menu.includes('data-home-action="calendar"><span>個人行程</span></button></section>'));
   assert.ok(!menu.includes('data-home-action="zodiac"'));
   assert.ok(!menu.includes('data-home-action="tasks"'));

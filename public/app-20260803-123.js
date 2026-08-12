@@ -1004,7 +1004,7 @@ async function taskCenter(){
     const focusId=new URLSearchParams(location.search).get("task");if(focusId)setTimeout(()=>document.querySelector(`[data-task-id="${CSS.escape(focusId)}"]`)?.scrollIntoView({behavior:"smooth",block:"center"}),50);
   }catch(error){layout(`<section class="card task-engine-loading"><h2>任務中心讀取失敗</h2><p class="muted">${esc(error.message||"暫時無法讀取任務")}</p><button class="btn" id="retryTasks">重新載入</button></section>`);$("#retryTasks").onclick=taskCenter}
 }
-const portalMenu = () => `<section class="portal-menu portal-menu-compact portal-menu-text" aria-label="會員功能"><button data-home-action="cardCollection"><span>名片收藏</span></button><button data-home-action="card"><span>電子名片</span></button><button data-home-action="daily"><span>每日簽到</span></button><button data-home-action="smartMatch"><span>智能配對</span></button><button data-home-action="calendar"><span>個人行程</span></button></section>`;
+const portalMenu = () => `<section class="portal-menu portal-menu-compact portal-menu-text" aria-label="會員功能"><button data-home-action="cardCollection"><span>名片收藏</span></button><button data-home-action="daily"><span>每日簽到</span></button><button data-home-action="smartMatch"><span>智能配對</span></button><button data-home-action="calendar"><span>個人行程</span></button></section>`;
 function openAiWear(){try{if(window.liff?.isInClient?.()){window.liff.openWindow({url:AI_WEAR_LIFF_URL,external:false});return}}catch{/* Fall back to direct LIFF navigation. */}window.location.href=AI_WEAR_LIFF_URL}
 function openOfficialSite(page="home"){
   document.querySelector("#officialSiteOverlay")?.remove();
@@ -1330,7 +1330,6 @@ async function home() {
       <div class="ak-frozen-nav">
         <div class="ak-feature-grid">
           <button data-home-action="cardCollection">${homeToolIcons.cardCollection}<span>名片收藏</span></button>
-          <button data-home-action="card">${homeToolIcons.card}<span>電子名片</span></button>
           <button type="button" data-home-inline="daily" aria-pressed="true">${homeToolIcons.daily}<span>每日簽到</span></button>
           <button data-home-action="smartMatch">${homeToolIcons.smartMatch}<span>智能配對</span></button>
           <button data-home-action="calendar">${homeToolIcons.calendar}<span>個人行程</span></button>
