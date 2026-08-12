@@ -1618,7 +1618,7 @@ async function app(request, env, ctx) {
     try {
       const wasCompleted = Boolean(member.profileCompletedAt);
       const profile = (await readJson(request)) || {};
-      const rosterVerification = await verifyTdeaRosterMember(env.TDEA_WORKER, profile);
+      const rosterVerification = await verifyTdeaRosterMember(env.TDEA_WORKER, env.TDEA_DESIGN_LOOKUP_SECRET, profile);
       const updated = await updateMemberProfile(
         env.DB,
         member.userId,
@@ -2027,7 +2027,7 @@ async function app(request, env, ctx) {
     if (request.method === "GET" && url.pathname === "/v1/admin/members") {
       const rows = await env.DB.prepare(`
         SELECT pu.id, pu.status, pu.created_at, mp.display_name, mp.picture_url, mp.phone, mp.email,
-          mp.gender, mp.member_number, mp.company_member_number, mp.industry, mp.birthday, mp.address, mp.admin_note, mp.profile_completed_at, COALESCE(pa.balance, 0) AS points_balance,
+          mp.full_name, mp.gender, mp.member_number, mp.company_member_number, mp.member_type, mp.roster_member_number, mp.roster_verified_name, mp.roster_verified_at, mp.roster_source, mp.industry, mp.birthday, mp.address, mp.admin_note, mp.profile_completed_at, COALESCE(pa.balance, 0) AS points_balance,
           rr.referrer_user_id, ref_mp.display_name AS referrer_name, ref_mp.member_number AS referrer_member_number,
           COALESCE(amp.system_access, 0) AS system_access, COALESCE(amp.operator_access, 0) AS operator_access
         FROM platform_users pu
@@ -2046,12 +2046,42 @@ async function app(request, env, ctx) {
       `).all();
       return json({ success: true, members: rows.results || [] });
     }
+    const memberRosterVerifyMatch = url.pathname.match(/^\/v1\/admin\/members\/([^/]+)\/verify-roster$/);
+    if (request.method === "POST" && memberRosterVerifyMatch) {
+      const memberId = decodeURIComponent(memberRosterVerifyMatch[1]);
+      const profile = await env.DB.prepare(`
+        SELECT mp.full_name, mp.phone, mp.birthday, mp.member_type, mp.roster_member_number
+        FROM member_profiles mp
+        JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'
+        WHERE mp.platform_user_id = ?
+      `).bind(memberId).first();
+      if (!profile) return json({ success: false, error: "Member not found" }, 404);
+
+      try {
+        const verified = await verifyTdeaRosterMember(env.TDEA_WORKER, env.TDEA_DESIGN_LOOKUP_SECRET, {
+          memberType: profile.member_type,
+          memberNumber: profile.roster_member_number,
+          fullName: profile.full_name,
+          phone: profile.phone,
+          birthday: profile.birthday,
+        });
+        await env.DB.batch([
+          env.DB.prepare("UPDATE member_profiles SET roster_member_number = ?, roster_verified_name = ?, roster_verified_at = CURRENT_TIMESTAMP, roster_source = ?, updated_at = CURRENT_TIMESTAMP WHERE platform_user_id = ?")
+            .bind(verified.memberNumber, verified.rosterName, verified.source, memberId),
+          env.DB.prepare("INSERT INTO audit_logs (id, actor_user_id, subject_user_id, action, metadata_json) VALUES (?, ?, ?, 'admin.member.roster_verified', ?)")
+            .bind(newId("audit"), admin.userId, memberId, JSON.stringify({ memberType: verified.memberType, memberNumber: verified.memberNumber, source: verified.source })),
+        ]);
+        return json({ success: true, binding: { ...verified, verifiedAt: new Date().toISOString() } });
+      } catch (error) {
+        return badRequest(error.message || "會員名冊核對失敗");
+      }
+    }
     const memberDetailMatch = url.pathname.match(/^\/v1\/admin\/members\/([^/]+)$/);
     if (request.method === "GET" && memberDetailMatch) {
       const memberId = memberDetailMatch[1];
       const member = await env.DB.prepare(`
         SELECT pu.id, pu.status, pu.created_at, mp.display_name, mp.picture_url, mp.phone, mp.email,
-          mp.gender, mp.member_number, mp.company_member_number, mp.industry, mp.birthday, mp.address, mp.admin_note, mp.profile_completed_at, COALESCE(pa.balance, 0) AS points_balance,
+          mp.full_name, mp.gender, mp.member_number, mp.company_member_number, mp.member_type, mp.roster_member_number, mp.roster_verified_name, mp.roster_verified_at, mp.roster_source, mp.industry, mp.birthday, mp.address, mp.admin_note, mp.profile_completed_at, COALESCE(pa.balance, 0) AS points_balance,
           rr.referrer_user_id, ref_mp.display_name AS referrer_name, ref_mp.member_number AS referrer_member_number,
           COALESCE(amp.system_access, 0) AS system_access, COALESCE(amp.operator_access, 0) AS operator_access
         FROM platform_users pu

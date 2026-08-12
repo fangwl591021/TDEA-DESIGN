@@ -2791,10 +2791,13 @@ function profileFormMarkup(required = false) {
     ? `<img id="memberLogoPreview" src="${esc(state.member.pictureUrl)}" alt="會員 Logo">`
     : `<span id="memberLogoPreview">${esc((state.member.displayName || "會").slice(0,1))}</span>`;
   const rosterTypeLabel = state.member.memberType === "association" ? "協會會員" : state.member.memberType === "vendor" ? "廠商會員" : "一般會員";
-  const rosterBindingStatus = state.member.memberType === "general" && state.member.profileCompletedAt
-    ? "一般會員｜不需名冊綁定"
-    : state.member.rosterVerifiedAt && state.member.rosterMemberNumber
-      ? `✓ 會員名冊綁定完成｜${rosterTypeLabel}｜編號 ${esc(state.member.rosterMemberNumber)}`
+  const bindingComplete = Boolean(state.member.rosterVerifiedAt && state.member.rosterSource);
+  const rosterBindingStatus = bindingComplete
+    ? state.member.memberType === "general"
+      ? "✓ 母站註冊資料綁定完成｜一般會員"
+      : `✓ 會員名冊綁定完成｜${rosterTypeLabel}｜編號 ${esc(state.member.rosterMemberNumber)}`
+    : state.member.memberType === "general"
+      ? "送出後將核對母站註冊資料（姓名、行動電話、生日）"
       : "送出後將由系統核對 TDEA 正式名冊";
   return `<div class="card profile-card member-registration-card">
     <h2 id="profileDialogTitle">${required ? "完成會員註冊" : "會員註冊資料"}</h2>
@@ -2828,8 +2831,14 @@ function bindProfileForm(dialog, required = false) {
     const selectedType = q("#memberType").value;
     const normalizedInputNumber = q("#rosterMemberNumber").value.trim().toUpperCase().replace(/[\s\-_.()（）]+/g, "");
     const normalizedSavedNumber = String(state.member.rosterMemberNumber || "").trim().toUpperCase().replace(/[\s\-_.()（）]+/g, "");
-    const sameVerifiedRoster = requiredRoster && state.member.rosterVerifiedAt && state.member.memberType === selectedType && normalizedInputNumber === normalizedSavedNumber;
-    q("#rosterBindingStatus").textContent = !requiredRoster ? "一般會員｜不需名冊綁定" : sameVerifiedRoster ? `✓ 會員名冊綁定完成｜${selectedType === "association" ? "協會會員" : "廠商會員"}｜編號 ${state.member.rosterMemberNumber}` : "送出後將由系統核對 TDEA 正式名冊";
+    const sameVerifiedBinding = state.member.rosterVerifiedAt && state.member.rosterSource && state.member.memberType === selectedType && (!requiredRoster || normalizedInputNumber === normalizedSavedNumber);
+    q("#rosterBindingStatus").textContent = sameVerifiedBinding
+      ? selectedType === "general"
+        ? "✓ 母站註冊資料綁定完成｜一般會員"
+        : `✓ 會員名冊綁定完成｜${selectedType === "association" ? "協會會員" : "廠商會員"}｜編號 ${state.member.rosterMemberNumber}`
+      : selectedType === "general"
+        ? "送出後將核對母站註冊資料（姓名、行動電話、生日）"
+        : "送出後將由系統核對 TDEA 正式名冊";
     q("#rosterMemberNumberField").hidden = !requiredRoster;
     q("#rosterMemberNumber").required = requiredRoster;
     if (!requiredRoster) q("#rosterMemberNumber").value = "";
@@ -2891,8 +2900,11 @@ function bindProfileForm(dialog, required = false) {
           }),
         })).member;
       }, { busy:"儲存中…", success:required ? "註冊完成" : "已儲存" });
-      const rosterBound = ["association", "vendor"].includes(state.member.memberType) && state.member.rosterVerifiedAt;
-      alert(rosterBound ? `會員名冊綁定完成\n${state.member.memberType === "association" ? "協會會員" : "廠商會員"}｜編號 ${state.member.rosterMemberNumber}` : required ? "註冊完成｜一般會員不需名冊綁定" : "會員資料已儲存");
+      const bindingComplete = Boolean(state.member.rosterVerifiedAt && state.member.rosterSource);
+      const bindingMessage = state.member.memberType === "general"
+        ? "母站註冊資料綁定完成\n一般會員"
+        : `會員名冊綁定完成\n${state.member.memberType === "association" ? "協會會員" : "廠商會員"}｜編號 ${state.member.rosterMemberNumber}`;
+      alert(bindingComplete ? bindingMessage : "會員資料已儲存");
       const afterProfile = sessionStorage.getItem("klinkweb_after_profile");
       sessionStorage.removeItem("klinkweb_after_profile");
       closeProfileDialog(dialog);

@@ -2,9 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { normalizeMemberType, verifyTdeaRosterMember } from "../src/tdea-roster.js";
 
-const service = (data, status = 200) => ({
-  fetch: async () => new Response(JSON.stringify({ data }), { status, headers: { "content-type": "application/json" } }),
-});
+const service = (match, status = 200, message = "") => {
+  let request;
+  return {
+    get request() { return request; },
+    fetch: async (input) => {
+      request = input;
+      return new Response(JSON.stringify(status < 400 ? { success: true, match } : { success: false, message }), {
+        status,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  };
+};
 
 test("registration accepts only the three supported member types", () => {
   assert.equal(normalizeMemberType("general"), "general");
@@ -13,26 +23,50 @@ test("registration accepts only the three supported member types", () => {
   assert.throws(() => normalizeMemberType("admin"), /一般會員、協會會員或廠商會員/);
 });
 
-test("general members do not require a roster number", async () => {
-  assert.deepEqual(await verifyTdeaRosterMember(null, { memberType: "general" }), {
-    memberType: "general", memberNumber: "", rosterName: "",
+test("general members are verified against mother registration data", async () => {
+  const lookup = service({ memberType: "general", memberNumber: "", rosterName: "王小明", source: "mother-register" });
+  const result = await verifyTdeaRosterMember(lookup, "shared-secret", {
+    memberType: "general",
+    fullName: "王小明",
+    phone: "0912345678",
+    birthday: "591021",
+  });
+  assert.equal(result.source, "mother-register");
+  assert.equal(result.rosterName, "王小明");
+  assert.equal(lookup.request.headers.get("x-tdea-design-key"), "shared-secret");
+  assert.deepEqual(await lookup.request.json(), {
+    memberType: "general",
+    memberNumber: "",
+    fullName: "王小明",
+    phone: "0912345678",
+    birthday: "591021",
   });
 });
 
-test("association and vendor members are verified against their own active roster", async () => {
-  const roster = service({
-    association: [{ memberNo: "A1090001", name: "王小明", qualification: "Y" }],
-    vendor: [{ rosterMemberNo: "V0001", companyName: "設計有限公司", qualification: "Y" }],
+test("association and vendor members use the CRM result returned by the mother worker", async () => {
+  const association = service({ memberType: "association", memberNumber: "A1090001", rosterName: "王小明", source: "association-crm" });
+  const vendor = service({ memberType: "vendor", memberNumber: "V0001", rosterName: "設計有限公司", source: "vendor-crm" });
+  assert.deepEqual(await verifyTdeaRosterMember(association, "secret", {
+    memberType: "association", memberNumber: "a1090001", fullName: "王小明",
+  }), {
+    memberType: "association", memberNumber: "A1090001", rosterName: "王小明", source: "association-crm",
   });
-  assert.equal((await verifyTdeaRosterMember(roster, { memberType: "association", memberNumber: "a1090001", fullName: "王小明" })).memberNumber, "A1090001");
-  assert.equal((await verifyTdeaRosterMember(roster, { memberType: "vendor", memberNumber: "v-0001", fullName: "設計有限公司" })).memberType, "vendor");
-  await assert.rejects(() => verifyTdeaRosterMember(roster, { memberType: "vendor", memberNumber: "A1090001", fullName: "王小明" }), /查無此會員編號/);
+  assert.equal((await verifyTdeaRosterMember(vendor, "secret", {
+    memberType: "vendor", memberNumber: "v0001", fullName: "設計有限公司",
+  })).source, "vendor-crm");
 });
 
-test("roster verification rejects missing numbers, inactive rows and mismatched names", async () => {
-  const roster = service({ association: [{ memberNo: "A1090001", name: "王小明", qualification: "N" }], vendor: [] });
-  await assert.rejects(() => verifyTdeaRosterMember(roster, { memberType: "association", memberNumber: "", fullName: "王小明" }), /必須填寫會員編號/);
-  await assert.rejects(() => verifyTdeaRosterMember(roster, { memberType: "association", memberNumber: "A1090001", fullName: "王小明" }), /不是有效會員/);
-  const active = service({ association: [{ memberNo: "A1090001", name: "王小明", qualification: "Y" }], vendor: [] });
-  await assert.rejects(() => verifyTdeaRosterMember(active, { memberType: "association", memberNumber: "A1090001", fullName: "陳小華" }), /姓名不一致/);
+test("lookup configuration and mother-worker errors fail closed", async () => {
+  await assert.rejects(() => verifyTdeaRosterMember(null, "secret", {
+    memberType: "general", fullName: "王小明",
+  }), /核對服務尚未設定/);
+  await assert.rejects(() => verifyTdeaRosterMember(service({}), "", {
+    memberType: "general", fullName: "王小明",
+  }), /核對密鑰尚未設定/);
+  await assert.rejects(() => verifyTdeaRosterMember(service({}, 404, "母站註冊資料查無一致紀錄"), "secret", {
+    memberType: "general", fullName: "王小明", phone: "0912345678", birthday: "591021",
+  }), /母站註冊資料查無一致紀錄/);
+  await assert.rejects(() => verifyTdeaRosterMember(service({}), "secret", {
+    memberType: "association", memberNumber: "", fullName: "王小明",
+  }), /必須填寫會員編號/);
 });

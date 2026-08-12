@@ -118,10 +118,12 @@
               <button class="secondary" type="button" id="refreshMembers">重新整理</button>
             </div>
             <div class="crm-toolbar">
-              <label class="crm-search">⌕<input id="memberSearch" placeholder="搜尋姓名、電話、公司／系統會員編號、LINE ID…" /></label>
+              <label class="crm-search">⌕<input id="memberSearch" placeholder="搜尋姓名、電話、會員編號或名冊姓名…" /></label>
+              <select class="crm-filter" id="memberTypeFilter" aria-label="會員類型"><option value="all">全部會員類型</option><option value="general">一般會員</option><option value="association">協會會員</option><option value="vendor">廠商會員</option></select>
+              <select class="crm-filter" id="memberBindingFilter" aria-label="資料綁定狀態"><option value="all">全部綁定狀態</option><option value="bound">綁定完成</option><option value="pending">待核對</option></select>
               <span>會員數：<strong id="memberTotal">–</strong></span>
             </div>
-            <div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>會員</th><th>公司會員編號</th><th>系統會員編號</th><th>推薦人</th><th>點數錢包</th><th>註冊狀態</th><th>建立時間</th><th></th></tr></thead><tbody id="memberList"></tbody></table></div>
+            <div class="crm-table-wrap"><table class="crm-table"><thead><tr><th>會員</th><th>會員類型</th><th>資料綁定</th><th>公司會員編號</th><th>系統會員編號</th><th>推薦人</th><th>點數錢包</th><th>註冊狀態</th><th>建立時間</th><th></th></tr></thead><tbody id="memberList"></tbody></table></div>
           </section>
           <section id="memberDetail" class="panel crm-detail hidden"></section>
         </section>
@@ -325,6 +327,6 @@
       </section>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
-    <script type="module" src="/admin.js?v=20260731-15"></script>
+    <script type="module" src="/admin.js?v=20260812-16"></script>
   </body>
 </html>

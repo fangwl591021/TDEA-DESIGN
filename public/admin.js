@@ -202,11 +202,28 @@ function renderMemberCrmInsights(insight = {}) {
   const labels={personality:'個性',interests:'興趣',wealth:'財富',health:'健康',career:'事業'};
   return `<section class="member-crm-insights"><div><h3>AI 五大標籤</h3><span>更新時間：${esc(String(insight.updatedAt || '').replace('T',' ').slice(0,16))}</span></div><section>${Object.entries(labels).map(([key,label])=>`<article class="${key}"><h4>${label}</h4><p>${esc(insight.cards?.[key] || '尚待補充')}</p></article>`).join('')}</section></section>`;
 }
+const memberTypeLabel = (type) => ({general:"一般會員",association:"協會會員",vendor:"廠商會員"}[type] || "未分類");
+const memberSourceLabel = (source) => ({"mother-register":"母站註冊資料","association-crm":"會員 CRM","vendor-crm":"廠商 CRM"}[source] || "尚未核對");
+const memberIsBound = (member) => Boolean(member.roster_verified_at && member.roster_source);
 function renderMembers() {
   const query = String($("#memberSearch")?.value || "").trim().toLowerCase();
-  const filtered = crmMembers.filter((member) => [member.display_name, member.phone, member.company_member_number, member.member_number, member.id, member.email].join(" ").toLowerCase().includes(query));
+  const typeFilter = $("#memberTypeFilter")?.value || "all";
+  const bindingFilter = $("#memberBindingFilter")?.value || "all";
+  const filtered = crmMembers.filter((member) => {
+    const searchable = [member.display_name, member.full_name, member.phone, member.company_member_number, member.member_number, member.roster_member_number, member.roster_verified_name, member.roster_source, member.id, member.email].join(" ").toLowerCase();
+    if (!searchable.includes(query)) return false;
+    if (typeFilter !== "all" && member.member_type !== typeFilter) return false;
+    if (bindingFilter === "bound" && !memberIsBound(member)) return false;
+    if (bindingFilter === "pending" && memberIsBound(member)) return false;
+    return true;
+  });
   $("#memberTotal").textContent = format(crmMembers.length);
-  $("#memberList").innerHTML = filtered.length ? filtered.map((member) => `<tr><td><div class="crm-member">${memberAvatar(member)}<div><b>${esc(member.display_name || "未命名會員")}</b><small>${esc(member.phone || member.email || member.id)}</small></div></div></td><td>${esc(member.company_member_number || "未填寫")}</td><td>${esc(member.member_number || "–")}</td><td>${esc(member.referrer_name || "直接加入")}<small>${esc(member.referrer_member_number || "")}</small></td><td><b class="crm-points">${format(member.points_balance)}</b></td><td>${crmStatus(member)}</td><td>${esc(String(member.created_at || "").replace("T", " ").slice(0, 16))}</td><td><button class="crm-open" data-member-id="${esc(member.id)}">CRM 檔案</button></td></tr>`).join("") : '<tr><td colspan="8" class="crm-empty">找不到符合條件的會員</td></tr>';
+  $("#memberList").innerHTML = filtered.length ? filtered.map((member) => {
+    const binding = memberIsBound(member)
+      ? '<span class="crm-tag ok">綁定完成</span><small>' + esc(memberSourceLabel(member.roster_source)) + '｜' + esc(String(member.roster_verified_at || "").replace("T", " ").slice(0, 16)) + '</small>'
+      : '<span class="crm-tag pending">待核對</span><small>' + esc(memberSourceLabel(member.roster_source)) + '</small>';
+    return '<tr><td><div class="crm-member">' + memberAvatar(member) + '<div><b>' + esc(member.display_name || "未命名會員") + '</b><small>' + esc(member.phone || member.email || member.id) + '</small></div></div></td><td><span class="crm-tag">' + esc(memberTypeLabel(member.member_type)) + '</span></td><td>' + binding + '</td><td>' + esc(member.company_member_number || "未填寫") + '</td><td>' + esc(member.member_number || "–") + '</td><td>' + esc(member.referrer_name || "直接加入") + '<small>' + esc(member.referrer_member_number || "") + '</small></td><td><b class="crm-points">' + format(member.points_balance) + '</b></td><td>' + crmStatus(member) + '</td><td>' + esc(String(member.created_at || "").replace("T", " ").slice(0, 16)) + '</td><td><button class="crm-open" data-member-id="' + esc(member.id) + '">CRM 檔案</button></td></tr>';
+  }).join("") : '<tr><td colspan="10" class="crm-empty">找不到符合條件的會員</td></tr>';
   document.querySelectorAll("[data-member-id]").forEach((button) => { button.onclick = () => openMemberDetail(button.dataset.memberId); });
 }
 async function loadMembers() {
@@ -241,7 +258,11 @@ async function openMemberDetail(id) {
     const member = data.member;
     const items = (title, rows, render) => `<section class="crm-detail-section"><h3>${title}</h3>${rows.length ? `<div class="crm-records">${rows.map(render).join("")}</div>` : '<p class="muted">尚無紀錄</p>'}</section>`;
     const g = (v) => member.gender === v ? "selected" : "";
-    panel.innerHTML = `<div class="crm-detail-head"><div class="crm-member">${memberAvatar(member)}<div><h2>會員檔案：${esc(member.display_name || "未命名會員")}</h2><small>系統 ID：${esc(member.id)}</small></div></div><button class="secondary" id="closeMemberDetail">關閉</button></div><div class="crm-editor"><section><h3>基本資料</h3><div class="crm-fields"><label>姓名<input id="crmName" value="${esc(member.display_name)}"></label><label>手機<input id="crmPhone" value="${esc(member.phone)}"></label><label>公司會員編號<input id="crmCompany" value="${esc(member.company_member_number)}"></label><label>系統會員編號<input value="${esc(member.member_number)}" readonly></label><label>性別<select id="crmGender"><option value="" ${g("")}>未填寫</option><option value="female" ${g("female")}>女性</option><option value="male" ${g("male")}>男性</option><option value="other" ${g("other")}>其他</option><option value="prefer_not_to_say" ${g("prefer_not_to_say")}>不透露</option></select></label><label>生日<input id="crmBirthday" type="date" value="${esc(member.birthday)}"></label><label>業種<input id="crmIndustry" value="${esc(member.industry)}"></label><label>推薦人系統 ID<input id="crmReferrer" value="${esc(member.referrer_user_id || "")}" placeholder="留空清除"></label><label class="wide">聯絡地址<input id="crmAddress" value="${esc(member.address)}"></label></div></section><section><h3>管理員備註</h3><textarea id="crmNote">${esc(member.admin_note)}</textarea></section></div><section class="crm-referral-panel"><div><h3>LIFF 推薦網址</h3><p>此網址已綁定本會員的推薦歸屬，可直接複製給會員使用。</p></div><div class="crm-referral-copy"><input id="crmReferralUrl" type="url" value="${esc(data.referralUrl || "")}" readonly aria-label="LIFF 推薦網址"><button type="button" class="secondary" id="copyCrmReferralUrl">複製網址</button></div></section><div class="crm-summary"><div><small>目前點數</small><b class="crm-points">${format(member.points_balance)}</b></div><div><small>推薦人</small><b>${esc(member.referrer_name || "直接加入")}</b></div><div><small>聯絡電話</small><b>${esc(member.phone || "未填寫")}</b></div><div><small>註冊狀態</small>${crmStatus(member)}</div></div><div class="crm-detail-grid">${items("點數紀錄", data.ledger, (row) => `<div><b>${esc(ruleEventLabel[row.event_type] || row.event_type)}</b><span class="${Number(row.delta) >= 0 ? "crm-plus" : "crm-minus"}">${Number(row.delta) >= 0 ? "+" : ""}${row.delta}</span><small>${esc(row.created_at)}</small></div>`)}${items("課程／活動", data.courses, (row) => `<div><b>${esc(row.title)}</b><span>${esc(row.status)}</span><small>${esc(row.starts_at)}｜${row.source === "calendar_qr" ? "行事曆 QR 報名" : "會員前台報名"}</small></div>`)}${items("每日簽到", data.checkins, (row) => `<div><b>${esc(row.business_date)}</b><span>${esc(row.status)}</span><small>${esc(row.checked_in_at)}</small></div>`)}${items("成功邀約", data.referrals, (row) => `<div><b>${esc(row.display_name || "新會員")}</b><span>${esc(row.member_number || "")}</span><small>${esc(row.created_at)}</small></div>`)}</div><div class="crm-editor-actions"><button class="secondary" id="cancelMemberEdit">取消</button><button class="primary" id="saveMemberDetail">儲存檔案變更</button></div>`;
+    const bindingSourceLabel = memberSourceLabel(member.roster_source);
+    const bindingComplete = memberIsBound(member);
+    const bindingButtonLabel = member.member_type === "general" ? "重新核對母站註冊" : "重新核對會員名冊";
+    const bindingPanel = '<section class="crm-binding-panel"><div><small>會員類型</small><b>' + esc(memberTypeLabel(member.member_type)) + '</b></div><div><small>資料來源</small><b>' + esc(bindingSourceLabel) + '</b></div><div><small>會員編號</small><b>' + esc(member.roster_member_number || "一般會員不適用") + '</b></div><div><small>綁定狀態</small><b class="' + (bindingComplete ? "complete" : "pending") + '">' + (bindingComplete ? "綁定完成" : "待核對") + '</b><span class="crm-roster-meta">' + esc(member.roster_verified_name || "") + (member.roster_verified_at ? "｜" + esc(String(member.roster_verified_at).replace("T", " ").slice(0, 16)) : "") + '</span></div><div class="crm-roster-actions"><button type="button" class="secondary" id="reverifyMemberBinding">' + bindingButtonLabel + '</button></div></section>';
+    panel.innerHTML = `<div class="crm-detail-head"><div class="crm-member">${memberAvatar(member)}<div><h2>會員檔案：${esc(member.display_name || "未命名會員")}</h2><small>系統 ID：${esc(member.id)}</small></div></div><button class="secondary" id="closeMemberDetail">關閉</button></div><div class="crm-editor"><section><h3>基本資料</h3><div class="crm-fields"><label>姓名<input id="crmName" value="${esc(member.display_name)}"></label><label>手機<input id="crmPhone" value="${esc(member.phone)}"></label><label>公司會員編號<input id="crmCompany" value="${esc(member.company_member_number)}"></label><label>系統會員編號<input value="${esc(member.member_number)}" readonly></label><label>性別<select id="crmGender"><option value="" ${g("")}>未填寫</option><option value="female" ${g("female")}>女性</option><option value="male" ${g("male")}>男性</option><option value="other" ${g("other")}>其他</option><option value="prefer_not_to_say" ${g("prefer_not_to_say")}>不透露</option></select></label><label>生日<input id="crmBirthday" type="date" value="${esc(member.birthday)}"></label><label>業種<input id="crmIndustry" value="${esc(member.industry)}"></label><label>推薦人系統 ID<input id="crmReferrer" value="${esc(member.referrer_user_id || "")}" placeholder="留空清除"></label><label class="wide">聯絡地址<input id="crmAddress" value="${esc(member.address)}"></label></div></section><section><h3>管理員備註</h3><textarea id="crmNote">${esc(member.admin_note)}</textarea></section></div>${bindingPanel}<section class="crm-referral-panel"><div><h3>LIFF 推薦網址</h3><p>此網址已綁定本會員的推薦歸屬，可直接複製給會員使用。</p></div><div class="crm-referral-copy"><input id="crmReferralUrl" type="url" value="${esc(data.referralUrl || "")}" readonly aria-label="LIFF 推薦網址"><button type="button" class="secondary" id="copyCrmReferralUrl">複製網址</button></div></section><div class="crm-summary"><div><small>目前點數</small><b class="crm-points">${format(member.points_balance)}</b></div><div><small>推薦人</small><b>${esc(member.referrer_name || "直接加入")}</b></div><div><small>聯絡電話</small><b>${esc(member.phone || "未填寫")}</b></div><div><small>註冊狀態</small>${crmStatus(member)}</div></div><div class="crm-detail-grid">${items("點數紀錄", data.ledger, (row) => `<div><b>${esc(ruleEventLabel[row.event_type] || row.event_type)}</b><span class="${Number(row.delta) >= 0 ? "crm-plus" : "crm-minus"}">${Number(row.delta) >= 0 ? "+" : ""}${row.delta}</span><small>${esc(row.created_at)}</small></div>`)}${items("課程／活動", data.courses, (row) => `<div><b>${esc(row.title)}</b><span>${esc(row.status)}</span><small>${esc(row.starts_at)}｜${row.source === "calendar_qr" ? "行事曆 QR 報名" : "會員前台報名"}</small></div>`)}${items("每日簽到", data.checkins, (row) => `<div><b>${esc(row.business_date)}</b><span>${esc(row.status)}</span><small>${esc(row.checked_in_at)}</small></div>`)}${items("成功邀約", data.referrals, (row) => `<div><b>${esc(row.display_name || "新會員")}</b><span>${esc(row.member_number || "")}</span><small>${esc(row.created_at)}</small></div>`)}</div><div class="crm-editor-actions"><button class="secondary" id="cancelMemberEdit">取消</button><button class="primary" id="saveMemberDetail">儲存檔案變更</button></div>`;
     panel.querySelector('.crm-editor')?.insertAdjacentHTML('afterend',renderMemberCrmInsights(data.crmInsights));
     const canAdjustPoints = Boolean(data.access?.canManagePoints);
     const canAssignPermissions = Boolean(data.access?.canManagePermissions) && data.targetAccess?.role !== "owner";
@@ -275,6 +296,18 @@ async function openMemberDetail(id) {
         showStatus("LIFF 推薦網址已複製");
       } catch {
         showStatus("無法自動複製，請長按網址後複製", "error");
+      }
+    });
+    $("#reverifyMemberBinding")?.addEventListener("click", async (event) => {
+      try {
+        await withButtonFeedback(event.currentTarget, async () => {
+          await api('/v1/admin/members/' + encodeURIComponent(id) + '/verify-roster', {}, "POST");
+          showStatus("會員資料綁定已完成");
+          await loadMembers();
+          await openMemberDetail(id);
+        }, {busy:"核對中…",success:"綁定完成"});
+      } catch (error) {
+        showStatus(error.message, "error");
       }
     });
     $("#saveMemberDetail").onclick = async () => { const button = $("#saveMemberDetail"); button.disabled = true; button.textContent = "儲存中…"; try { await api(`/v1/admin/members/${encodeURIComponent(id)}`, {displayName:$("#crmName").value,phone:$("#crmPhone").value,companyMemberNumber:$("#crmCompany").value,gender:$("#crmGender").value,birthday:$("#crmBirthday").value,industry:$("#crmIndustry").value,address:$("#crmAddress").value,adminNote:$("#crmNote").value,referrerUserId:$("#crmReferrer").value}, "PATCH"); showStatus("會員檔案已儲存"); await loadMembers(); await openMemberDetail(id); } catch(error) { showStatus(error.message,"error"); button.disabled=false; button.textContent="儲存檔案變更"; } };
@@ -328,6 +361,8 @@ $("#refreshMembers").addEventListener("click", (event) =>
   withButtonFeedback(event.currentTarget, loadMembers, { busy:"整理中…", success:"已更新" }),
 );
 $("#memberSearch").addEventListener("input", renderMembers);
+$("#memberTypeFilter")?.addEventListener("change", renderMembers);
+$("#memberBindingFilter")?.addEventListener("change", renderMembers);
 $("#refreshAdminCards")?.addEventListener("click",(event)=>withButtonFeedback(event.currentTarget,loadAdminCards,{busy:"整理中…",success:"已更新"}));
 $("#exportAdminCards")?.addEventListener("click",exportAdminCards);
 $("#adminCardSearch")?.addEventListener("input",renderAdminCards);
