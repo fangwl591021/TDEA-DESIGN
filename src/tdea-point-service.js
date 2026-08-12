@@ -1,5 +1,5 @@
 import { adjustPoints, awardPoints, getWallet } from './points.js';
-import { newId, resolveCanonicalMemberId, resolveLineMember } from './member-repository.js';
+import { getMember, newId, resolveCanonicalMemberId, resolveLineMember } from './member-repository.js';
 
 const ALLOWED_POINT_EVENTS = new Set([
   'daily_ad_checkin',
@@ -232,7 +232,28 @@ export async function handleTdeaPointService(request, env) {
     const userId = await userIdFromLineUid(env.DB, lineUserId);
     if (!userId) return json({ success: false, error: 'LINE member not found' }, 404);
     const wallet = await getWallet(env.DB, userId);
-    return json({ success: true, userId, lineUserId, ...wallet });
+    const member = await getMember(env.DB, userId);
+    return json({
+      success: true,
+      userId,
+      lineUserId,
+      registered: Boolean(member?.profileCompletedAt),
+      member: member ? {
+        userId: member.userId,
+        displayName: member.displayName || '',
+        fullName: member.fullName || '',
+        phone: member.phone || '',
+        email: member.email || '',
+        memberNumber: member.memberNumber || '',
+        memberType: member.memberType || 'general',
+        rosterMemberNumber: member.rosterMemberNumber || '',
+        companyMemberNumber: member.companyMemberNumber || '',
+        rosterVerifiedAt: member.rosterVerifiedAt || '',
+        rosterVerifiedName: member.rosterVerifiedName || '',
+        profileCompletedAt: member.profileCompletedAt || ''
+      } : null,
+      ...wallet
+    });
   }
 
   if (request.method === 'POST' && url.pathname === '/internal/tdea/points/initialize') {
