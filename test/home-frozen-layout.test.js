@@ -11,7 +11,7 @@ const homeEnd = app.indexOf("async function legacyHome()", homeStart);
 const home = app.slice(homeStart, homeEnd);
 
 test("home uses a compact member summary, shared task toggle, and social-first viewport", () => {
-  assert.match(home, /class="ak-wordmark">A’kaffit/);
+  assert.match(home, /class="ak-wordmark">TDEA/);
   assert.match(home, /class="ak-task-notice\$\{taskAlert\}" data-home-task-toggle aria-expanded="false" aria-controls="homeTaskDetail"/);
   assert.equal((home.match(/data-home-task-toggle/g) || []).length, 2);
   assert.match(home, /class="ak-member-avatar" data-home-action="profile"[\s\S]*\$\{avatar\(\)\}/);
@@ -86,13 +86,14 @@ test("exclusive share still opens as a closable QR dialog", () => {
   assert.doesNotMatch(shareQrSource, /60000|60 秒|setTimeout/);
 });
 
-test("exclusive share does not force LIFF login for phone-birthday members", () => {
+test("exclusive share opens the LINE target picker with a LINE share URL fallback", () => {
   const copyInviteSource = app.slice(
     app.indexOf("async function copyInvite()"),
     app.indexOf("async function showWalletQr("),
   );
   assert.doesNotMatch(copyInviteSource, /liff\.login|markLiffLoginPending/);
   assert.match(copyInviteSource, /canUseLinePicker/);
-  assert.match(copyInviteSource, /navigator\.share/);
-  assert.match(copyInviteSource, /navigator\.clipboard\.writeText/);
+  assert.match(copyInviteSource, /liff\.shareTargetPicker/);
+  assert.match(copyInviteSource, /https:\/\/line\.me\/R\/share\?text=/);
+  assert.match(copyInviteSource, /window\.location\.assign\(lineShareUrl\)/);
 });
