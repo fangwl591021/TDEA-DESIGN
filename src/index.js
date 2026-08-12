@@ -21,6 +21,7 @@ import {
   updateMemberProfile,
 } from "./member-repository.js";
 import { adjustPoints, awardPoints, getWallet } from "./points.js";
+import { handleTdeaPointService } from "./tdea-point-service.js";
 import { lookupTdeaRosterMemberNumber, verifyTdeaRosterMember } from "./tdea-roster.js";
 import {
   cancelCalendarSession,
@@ -744,6 +745,8 @@ async function officialAkaffitSite() {
 
 async function app(request, env, ctx) {
   const url = new URL(request.url);
+  const tdeaPointResponse = await handleTdeaPointService(request, env);
+  if (tdeaPointResponse) return tdeaPointResponse;
   let cardShareId = "";
   if (request.method === "GET" && url.pathname === "/r/card-share") {
     cardShareId = String(url.searchParams.get("shareCardId") || "").trim();
