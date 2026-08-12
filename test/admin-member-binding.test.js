@@ -27,3 +27,12 @@ test("admin CRM shows member type, binding source and re-verification", () => {
   assert.match(admin, /id="reverifyMemberBinding"/);
   assert.ok(admin.includes("/verify-roster"));
 });
+
+test("admin re-verification writes a fresh verified timestamp and authoritative binding source", () => {
+  const worker = read("src/index.js");
+  assert.match(worker, /\/v1\/admin\/members\/\(\[\^\/\]\+\)\/verify-roster/);
+  assert.ok(worker.includes("roster_verified_at = CURRENT_TIMESTAMP, roster_source = ?, updated_at = CURRENT_TIMESTAMP"));
+  assert.ok(worker.includes(".bind(verified.memberNumber, verified.rosterName, verified.source, memberId)"));
+  assert.ok(worker.includes("'admin.member.roster_verified'"));
+  assert.ok(worker.includes("return badRequest(error.message || \"會員名冊核對失敗\")"));
+});
