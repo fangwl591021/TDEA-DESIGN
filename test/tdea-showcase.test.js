@@ -25,4 +25,8 @@ test("TDEA 活動與廠商展示使用服務綁定並僅回傳展示欄位", () 
   assert.ok(app.includes('data-daily-panel="vendors">廠商輪播'));
   assert.ok(app.includes('api("/v1/tdea-showcase")'));
   assert.ok(app.includes('class="tdea-vendor-carousel"'));
+  assert.ok(app.includes('class="tdea-activity-carousel"'));
+  assert.ok(app.includes('左右滑動瀏覽'));
+  assert.ok(app.includes('詳細說明'));
+  assert.ok(app.includes('點我報名'));
 });

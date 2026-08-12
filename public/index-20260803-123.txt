@@ -2,7 +2,7 @@
 <html lang="zh-Hant">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>TDEA 商務中心</title><link rel="stylesheet" href="/styles.css?v=20260731-69"><link rel="stylesheet" href="/akaffit-20260801-41.css?v=20260812-136"><link rel="stylesheet" href="/task-engine-20260729-3.css">
+  <title>TDEA 商務中心</title><link rel="stylesheet" href="/styles.css?v=20260812-137"><link rel="stylesheet" href="/akaffit-20260801-41.css?v=20260812-136"><link rel="stylesheet" href="/task-engine-20260729-3.css">
   <link rel="stylesheet" href="/vendor/cropper.min.css">
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
