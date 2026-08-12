@@ -30,6 +30,8 @@ test("TDEA 活動與廣告贈點展示使用服務綁定並僅回傳展示欄位
   assert.ok(app.includes("開啟廣告贈點"));
   assert.ok(!app.includes('class="tdea-vendor-carousel"'));
   assert.ok(app.includes('class="tdea-activity-carousel"'));
+  const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
+  assert.match(styles, /\.tdea-activity-card\{[^}]*min\(48vw,220px\)[^}]*max-width:220px/);
   assert.ok(app.includes('aria-label="TDEA 活動報名"'));
   assert.ok(!app.includes("tdea-activity-copy"));
   assert.ok(app.includes("詳細說明"));
