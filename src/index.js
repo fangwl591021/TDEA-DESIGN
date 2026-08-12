@@ -21,7 +21,7 @@ import {
   updateMemberProfile,
 } from "./member-repository.js";
 import { adjustPoints, awardPoints, getWallet } from "./points.js";
-import { verifyTdeaRosterMember } from "./tdea-roster.js";
+import { lookupTdeaRosterMemberNumber, verifyTdeaRosterMember } from "./tdea-roster.js";
 import {
   cancelCalendarSession,
   checkInToSession,
@@ -1647,6 +1647,17 @@ async function app(request, env, ctx) {
     try{return json({success:true,...await revokeContactShare(env.DB,member.userId,decodeURIComponent(contactShareMatch[1]))})}catch(error){return badRequest(error.message||'停止分享失敗')}
   }
 
+  if (request.method === "POST" && url.pathname === "/v1/roster/member-number-lookup") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    try {
+      const body = (await readJson(request)) || {};
+      const match = await lookupTdeaRosterMemberNumber(env.TDEA_WORKER, env.TDEA_DESIGN_LOOKUP_SECRET, body);
+      return json({ success: true, match });
+    } catch (error) {
+      return badRequest(error.message || "會員編號查詢失敗");
+    }
+  }
   if (request.method === "PATCH" && url.pathname === "/v1/me") {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);

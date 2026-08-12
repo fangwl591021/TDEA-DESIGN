@@ -2765,6 +2765,38 @@ function bindSocialLinkRows(root = document) {
     }
   });
 }
+function openRosterMemberNumberLookup(dialog) {
+  const memberType = dialog.querySelector("#memberType")?.value || "";
+  if (!["association", "vendor"].includes(memberType)) return alert("請先選擇協會會員或廠商會員");
+  const modal = document.createElement("div");
+  modal.className = "ak-roster-lookup-dialog";
+  modal.innerHTML = `<div class="ak-roster-lookup-backdrop"></div><section class="ak-roster-lookup-sheet" role="dialog" aria-modal="true" aria-labelledby="rosterLookupTitle"><button type="button" class="ak-roster-lookup-close" aria-label="關閉">×</button><h2 id="rosterLookupTitle">會員編號查詢</h2><p>輸入姓名／公司名稱，從 TDEA ${memberType === "vendor" ? "廠商" : "協會"}名冊查詢會員編號。</p><label>姓名／公司名稱<input id="rosterLookupName" maxlength="120" autocomplete="name" value="${esc(dialog.querySelector("#fullName")?.value || "")}"></label><button type="button" class="btn" id="rosterLookupSearch">查詢</button><div id="rosterLookupResult" class="ak-roster-lookup-result" aria-live="polite"></div></section>`;
+  const close = () => modal.remove();
+  modal.querySelector(".ak-roster-lookup-backdrop")?.addEventListener("click", close);
+  modal.querySelector(".ak-roster-lookup-close")?.addEventListener("click", close);
+  modal.addEventListener("keydown", (event) => { if (event.key === "Escape") close(); });
+  const search = async () => {
+    const button = modal.querySelector("#rosterLookupSearch");
+    const name = modal.querySelector("#rosterLookupName")?.value.trim() || "";
+    if (!name) return alert("請輸入姓名／公司名稱");
+    const result = modal.querySelector("#rosterLookupResult");
+    try {
+      await withActionFeedback(button, async () => {
+        const response = await api("/v1/roster/member-number-lookup", { method:"POST", body:JSON.stringify({ memberType, fullName:name }) });
+        const match = response.match;
+        result.innerHTML = `<p>查詢結果：${esc(match.rosterName || name)}</p><div><strong>${esc(match.memberNumber)}</strong><button type="button" class="btn alt" id="copyRosterMemberNumber">複製編號</button></div>`;
+        modal.querySelector("#copyRosterMemberNumber")?.addEventListener("click", async () => {
+          try { await navigator.clipboard.writeText(match.memberNumber); } catch { return alert("無法自動複製，請手動複製會員編號"); }
+          modal.querySelector("#copyRosterMemberNumber").textContent = "已複製";
+          dialog.querySelector("#rosterMemberNumber").value = match.memberNumber;
+        });
+      }, { busy:"查詢中…", success:"已查詢" });
+    } catch (error) { result.textContent = error.message || "會員編號查詢失敗"; }
+  };
+  modal.querySelector("#rosterLookupSearch")?.addEventListener("click", search);
+  document.body.append(modal);
+  modal.querySelector("#rosterLookupName")?.focus();
+}
 function profileFormMarkup(required = false) {
   const links = Array.isArray(state.member.socialLinks) && state.member.socialLinks.length ? state.member.socialLinks : [{ label:"", url:"" }];
   const logo = state.member.pictureUrl
@@ -2787,7 +2819,7 @@ function profileFormMarkup(required = false) {
     <label>會員類型</label><select id="memberType" required><option value="">請選擇</option><option value="general" ${state.member.memberType === "general" ? "selected" : ""}>一般會員</option><option value="association" ${state.member.memberType === "association" ? "selected" : ""}>協會會員</option><option value="vendor" ${state.member.memberType === "vendor" ? "selected" : ""}>廠商會員</option></select>
     <label>姓名／公司名稱</label><input id="fullName" value="${esc(state.member.fullName || "")}" maxlength="120" autocomplete="name" required>
     <label>行動電話</label><input id="phone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(state.member.phone || "")}" placeholder="0912345678" maxlength="20" ${state.member.phone ? "readonly" : ""} required>
-    <div id="rosterMemberNumberField"><label>會員編號</label><input id="rosterMemberNumber" value="${esc(state.member.rosterMemberNumber || "")}" maxlength="80" autocomplete="off"><small>協會會員與廠商會員必填，系統會到 TDEA 正式名冊核對。</small></div>
+    <div id="rosterMemberNumberField"><div class="member-roster-heading"><label>會員編號</label><button type="button" id="lookupRosterMemberNumber">查詢會員編號</button></div><input id="rosterMemberNumber" value="${esc(state.member.rosterMemberNumber || "")}" maxlength="80" autocomplete="off"><small>協會會員與廠商會員必填，系統會到 TDEA 正式名冊核對。</small></div>
     <p id="rosterBindingStatus" class="member-registration-number">${rosterBindingStatus}</p>
     <label>生日密碼（民國年月日）</label><input id="birthday" type="text" inputmode="numeric" value="${esc(birthdayPassword(state.member.birthday))}" placeholder="例如 591021、390305" pattern="[0-9]{6,7}" maxlength="7" required>
     <label>性別</label><select id="gender" required><option value="">請選擇</option><option value="female" ${state.member.gender === "female" ? "selected" : ""}>女性</option><option value="male" ${state.member.gender === "male" ? "selected" : ""}>男性</option><option value="other" ${state.member.gender === "other" ? "selected" : ""}>其他</option><option value="prefer_not_to_say" ${state.member.gender === "prefer_not_to_say" ? "selected" : ""}>不透露</option></select>
@@ -2823,6 +2855,7 @@ function bindProfileForm(dialog, required = false) {
     q("#rosterMemberNumber").required = requiredRoster;
     if (!requiredRoster) q("#rosterMemberNumber").value = "";
   };
+  q("#lookupRosterMemberNumber").onclick = () => openRosterMemberNumberLookup(dialog);
   q("#memberType").onchange = syncRosterRequirement;
   syncRosterRequirement();
   q("#addSocialLink").onclick = () => {

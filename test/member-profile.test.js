@@ -33,6 +33,10 @@ test("member registration UI includes logo, name, numeric birthday, and repeatab
   assert.match(app, />協會會員</);
   assert.match(app, />廠商會員</);
   assert.match(app, /id="rosterMemberNumber"/);
+  assert.match(app, /id="lookupRosterMemberNumber"/);
+  assert.match(app, /function openRosterMemberNumberLookup/);
+  assert.match(app, /\/v1\/roster\/member-number-lookup/);
+  assert.match(app, /id="copyRosterMemberNumber">複製編號/);
   assert.match(app, /TDEA 正式名冊核對/);
   assert.match(app, /會員名冊綁定完成/);
   assert.match(app, /母站註冊資料綁定完成/);

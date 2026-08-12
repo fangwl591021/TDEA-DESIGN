@@ -43,3 +43,27 @@ export async function verifyTdeaRosterMember(service, lookupSecret, { memberType
     source: clean(payload.match.source, 40),
   };
 }
+
+export async function lookupTdeaRosterMemberNumber(service, lookupSecret, { memberType, fullName }) {
+  const type = normalizeMemberType(memberType);
+  const name = clean(fullName, 120);
+  if (!["association", "vendor"].includes(type)) throw new Error("請先選擇協會會員或廠商會員");
+  if (!name) throw new Error("請填寫姓名／公司名稱");
+  if (!service?.fetch) throw new Error("TDEA 會員核對服務尚未設定");
+  if (!clean(lookupSecret, 500)) throw new Error("TDEA 會員核對密鑰尚未設定");
+  const response = await service.fetch(new Request("https://tdea-roster.internal/api/internal/tdea-design/member-number-lookup", {
+    method: "POST",
+    headers: { accept: "application/json", "content-type": "application/json", "x-tdea-design-key": clean(lookupSecret, 500) },
+    body: JSON.stringify({ memberType: type, fullName: name }),
+  }));
+  const payload = await response.json().catch(() => null);
+  if (!response.ok || !payload?.success || !payload?.match?.memberNumber) {
+    throw new Error(clean(payload?.message, 240) || "會員編號查詢失敗，請稍後再試");
+  }
+  return {
+    memberType: type,
+    memberNumber: clean(payload.match.memberNumber, 80).toUpperCase(),
+    rosterName: clean(payload.match.rosterName, 120),
+    source: clean(payload.match.source, 40),
+  };
+}

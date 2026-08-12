@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizeMemberType, verifyTdeaRosterMember } from "../src/tdea-roster.js";
+import { lookupTdeaRosterMemberNumber, normalizeMemberType, verifyTdeaRosterMember } from "../src/tdea-roster.js";
 
 const service = (match, status = 200, message = "") => {
   let request;
@@ -69,4 +69,12 @@ test("lookup configuration and mother-worker errors fail closed", async () => {
   await assert.rejects(() => verifyTdeaRosterMember(service({}), "secret", {
     memberType: "association", memberNumber: "", fullName: "王小明",
   }), /必須填寫會員編號/);
+});
+
+test("member-number lookup searches the protected mother roster by name", async () => {
+  const lookup = service({ memberType: "association", memberNumber: "A1090001", rosterName: "王小明", source: "association-crm" });
+  const result = await lookupTdeaRosterMemberNumber(lookup, "shared-secret", { memberType: "association", fullName: "王小明" });
+  assert.deepEqual(result, { memberType: "association", memberNumber: "A1090001", rosterName: "王小明", source: "association-crm" });
+  assert.equal(lookup.request.url, "https://tdea-roster.internal/api/internal/tdea-design/member-number-lookup");
+  assert.deepEqual(await lookup.request.json(), { memberType: "association", fullName: "王小明" });
 });
