@@ -31,6 +31,7 @@ test("內頁功能列移除返回首頁，並將返回首頁放在共用 Banner"
   assert.ok(layout.includes('daily:["TDEA 每日簽到"'));
   assert.equal((app.match(/data-home-action="home"/g) || []).length, 1);
   const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
-  assert.match(styles, /\.portal-menu-text\{grid-template-columns:repeat\(5/);
+  assert.match(styles, /\.portal-menu-text\{\s*grid-template-columns:repeat\(4/);
   assert.ok(!app.includes('class="back-card" data-home-action="home"'));
+  assert.doesNotMatch(styles, /@media\(min-width:720px\)\{\s*\.portal-menu-text\{grid-template-columns:repeat\(5/);
 });

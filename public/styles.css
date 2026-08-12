@@ -389,9 +389,6 @@ main#app>*,.content,.business-card,.business-card-detail,.line-source-ecard,.lin
   outline:none;
 }
 .portal-menu-text .portal-menu-icon{display:none!important}
-@media(min-width:720px){
-  .portal-menu-text{grid-template-columns:repeat(5,minmax(0,1fr))}
-}
 @media(max-width:420px){
   .portal-menu-text button{font-size:14px}
   .site-home-frame{height:auto;min-height:440px}
