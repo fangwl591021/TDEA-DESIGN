@@ -91,6 +91,7 @@ async function ensureRosterMember(db, row) {
   if (!lineUserId) return { skipped: true, reason: 'missing_line_uid' };
 
   let userId = await userIdFromLineUid(db, lineUserId);
+  const matchedByLine = Boolean(userId);
   let created = false;
   let attached = false;
 
@@ -111,6 +112,29 @@ async function ensureRosterMember(db, row) {
   }
 
   if (!userId) return { skipped: true, reason: 'member_resolution_failed' };
+
+  if (matchedByLine && memberNo) {
+    const profile = await db.prepare(`
+      SELECT roster_member_number, company_member_number
+      FROM member_profiles
+      WHERE platform_user_id = ?
+      LIMIT 1
+    `).bind(userId).first();
+    const existingMemberNos = [profile?.roster_member_number, profile?.company_member_number]
+      .map((value) => clean(value, 120).toUpperCase())
+      .filter(Boolean);
+    const existingMemberNo = existingMemberNos.find((value) => value !== memberNo) || '';
+    if (existingMemberNo) {
+      return {
+        skipped: true,
+        reason: 'line_uid_member_no_conflict',
+        userId,
+        lineUserId,
+        memberNo,
+        existingMemberNo,
+      };
+    }
+  }
 
   await db.prepare(`
     UPDATE member_profiles
@@ -215,14 +239,22 @@ export async function handleTdeaPointService(request, env) {
     const body = await readJson(request);
     const members = Array.isArray(body.members) ? body.members.slice(0, 600) : [];
     if (!members.length) return json({ success: false, error: 'No members supplied' }, 400);
-    const summary = { received: members.length, initialized: 0, existing: 0, skipped: 0, createdMembers: 0, attachedLineIds: 0, errors: [] };
+    const summary = { received: members.length, initialized: 0, existing: 0, skipped: 0, createdMembers: 0, attachedLineIds: 0, conflicts: [], errors: [] };
     const results = [];
     for (const row of members) {
       try {
         const member = await ensureRosterMember(env.DB, row || {});
         if (member.skipped) {
           summary.skipped += 1;
-          results.push({ memberNo: clean(row?.memberNo, 120), success: false, reason: member.reason });
+          const skippedResult = {
+            memberNo: clean(row?.memberNo, 120),
+            lineUserId: clean(row?.lineUserId, 256),
+            success: false,
+            reason: member.reason,
+            existingMemberNo: member.existingMemberNo || '',
+          };
+          if (member.reason === 'line_uid_member_no_conflict') summary.conflicts.push(skippedResult);
+          results.push(skippedResult);
           continue;
         }
         if (member.created) summary.createdMembers += 1;
