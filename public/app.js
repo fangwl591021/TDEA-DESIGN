@@ -1528,7 +1528,7 @@ async function daily(targetSelector = "") {
     target.innerHTML = markup;
     return true;
   };
-  const panelTabs = `<div class="daily-top-tabs daily-panel-tabs" role="tablist" aria-label="TDEA 服務"><button type="button" class="daily-top-tab ${state.dailyPanel === "checkin" ? "active" : ""}" data-daily-panel="checkin">每日簽到</button><button type="button" class="daily-top-tab ${state.dailyPanel === "activities" ? "active" : ""}" data-daily-panel="activities">活動報名</button><button type="button" class="daily-top-tab ${state.dailyPanel === "vendors" ? "active" : ""}" data-daily-panel="vendors">廠商輪播</button></div>`;
+  const panelTabs = `<div class="daily-top-tabs daily-panel-tabs" role="tablist" aria-label="TDEA 服務"><button type="button" class="daily-top-tab ${state.dailyPanel === "checkin" ? "active" : ""}" data-daily-panel="checkin">每日簽到</button><button type="button" class="daily-top-tab ${state.dailyPanel === "activities" ? "active" : ""}" data-daily-panel="activities">活動報名</button><button type="button" class="daily-top-tab ${state.dailyPanel === "ads" ? "active" : ""}" data-daily-panel="ads">廣告贈點</button></div>`;
   const renderTabs = (campaigns = []) => campaigns.length ? `<div class="daily-top-tabs daily-campaign-tabs" role="tablist" aria-label="簽到活動">${campaigns.map((campaign) => `<button type="button" class="daily-top-tab ${state.dailyCampaignId === campaign.id ? "active" : ""}" data-daily-campaign="${esc(campaign.id)}">${esc(campaign.name || "簽到活動")}</button>`).join("")}</div>` : "";
   const bindTabs = () => {
     getDailyRoot()?.querySelectorAll("[data-daily-panel]").forEach((button) => { button.onclick = () => { state.dailyPanel = button.dataset.dailyPanel || "checkin"; daily(targetSelector); }; });
@@ -1538,13 +1538,13 @@ async function daily(targetSelector = "") {
     try {
       const showcase = await api("/v1/tdea-showcase");
       const activities = Array.isArray(showcase.activities) ? showcase.activities : [];
-      const vendors = Array.isArray(showcase.vendors) ? showcase.vendors : [];
+      const ads = Array.isArray(showcase.ads) ? showcase.ads : [];
       const activityMarkup = activities.length ? `<section class="tdea-activity-carousel" aria-label="TDEA 活動報名，左右滑動瀏覽">${activities.map((activity) => `<article class="card tdea-activity-card"><div class="tdea-activity-poster">${activity.imageUrl ? `<img src="${esc(activity.imageUrl)}" alt="${esc(activity.title)}" loading="lazy">` : `<span>TDEA 活動</span>`}</div><div class="tdea-activity-copy"><small>${esc(activity.courseTime || "TDEA 活動")}</small><h2>${esc(activity.title)}</h2><p>${esc(activity.description || "活動資訊請見報名頁")}</p><footer>${activity.deadline ? `<span>報名截止：${esc(activity.deadline)}</span>` : ""}${activity.capacity ? `<span>名額：${esc(activity.capacity)}</span>` : ""}</footer>${activity.registrationUrl ? `<div class="tdea-activity-actions"><a class="btn alt" href="${esc(activity.registrationUrl)}" target="_blank" rel="noopener noreferrer">詳細說明</a><a class="btn" href="${esc(activity.registrationUrl)}" target="_blank" rel="noopener noreferrer">點我報名</a></div>` : ""}</div></article>`).join("")}</section>` : `<div class="card muted">目前沒有公開活動。</div>`;
-      const vendorMarkup = vendors.length ? `<section class="tdea-vendor-carousel" aria-label="TDEA 廠商輪播">${vendors.map((vendor) => `<article class="tdea-vendor-card"><img src="${esc(vendor.imageUrl)}" alt="${esc(vendor.name)}" loading="lazy"><strong>${esc(vendor.name)}</strong></article>`).join("")}</section>` : `<div class="card muted">目前沒有可展示的廠商。</div>`;
-      if (!renderDaily(`${panelTabs}${state.dailyPanel === "activities" ? activityMarkup : vendorMarkup}`)) return;
+      const adMarkup = ads.length ? `<section class="tdea-ad-carousel" aria-label="TDEA 廣告贈點">${ads.map((ad) => `<article class="tdea-ad-card"><img src="${esc(ad.imageUrl)}" alt="${esc(ad.title)}" loading="lazy"><div><strong>${esc(ad.title)}</strong><span>點擊廣告每日可獲 ${esc(ad.points)} 點</span>${showcase.adLiffUrl ? `<a class="btn" href="${esc(showcase.adLiffUrl)}" target="_blank" rel="noopener noreferrer">開啟廣告贈點</a>` : ""}</div></article>`).join("")}</section>` : `<div class="card muted">目前沒有啟用中的廣告贈點。</div>`;
+      if (!renderDaily(`${panelTabs}${state.dailyPanel === "activities" ? activityMarkup : adMarkup}`)) return;
       bindTabs();
-      const carousel = getDailyRoot()?.querySelector(".tdea-vendor-carousel");
-      if (carousel && vendors.length > 1) dailyRotationTimer = setInterval(() => { if (document.visibilityState === "visible") carousel.scrollBy({ left:Math.max(180, carousel.clientWidth*.72), behavior:"smooth" }); }, 4000);
+      const carousel = getDailyRoot()?.querySelector(".tdea-ad-carousel");
+      if (carousel && ads.length > 1) dailyRotationTimer = setInterval(() => { if (document.visibilityState === "visible") carousel.scrollBy({ left:Math.max(180, carousel.clientWidth*.72), behavior:"smooth" }); }, 4000);
       return;
     } catch (error) {
       if (!renderDaily(`${panelTabs}<div class="card muted">${esc(error.message || "TDEA 內容暫時無法載入")}</div>`)) return;

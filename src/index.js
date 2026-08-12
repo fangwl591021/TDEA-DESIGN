@@ -548,22 +548,23 @@ function tdeaShowcaseUrl(value) {
 async function fetchTdeaShowcase(env) {
   if (!env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== "function") throw new Error("TDEA service binding is unavailable");
   const requestOptions = { headers: { accept: "application/json" } };
-  const [managerResponse, vendorResponse] = await Promise.all([
+  const [managerResponse, marqueeResponse] = await Promise.all([
     env.TDEA_WORKER.fetch("https://tdea.internal/api/manager-data", requestOptions),
-    env.TDEA_WORKER.fetch("https://tdea.internal/api/vendor-card-menu", requestOptions),
+    env.TDEA_WORKER.fetch("https://tdea.internal/api/marquee", requestOptions),
   ]);
-  if (!managerResponse.ok || !vendorResponse.ok) throw new Error("TDEA showcase source is unavailable");
+  if (!managerResponse.ok || !marqueeResponse.ok) throw new Error("TDEA showcase source is unavailable");
   const managerPayload = JSON.parse(await boundedResponseText(managerResponse, TDEA_SHOWCASE_MAX_BYTES));
-  const vendorPayload = JSON.parse(await boundedResponseText(vendorResponse, TDEA_SHOWCASE_MAX_BYTES));
+  const marqueePayload = JSON.parse(await boundedResponseText(marqueeResponse, TDEA_SHOWCASE_MAX_BYTES));
   const activities = (Array.isArray(managerPayload?.data?.activities) ? managerPayload.data.activities : [])
     .filter((activity) => tdeaShowcaseText(activity?.status, 20) === "上架")
     .map((activity) => ({ id:tdeaShowcaseText(activity?.id,160), title:tdeaShowcaseText(activity?.name,180), description:tdeaShowcaseText(activity?.detailText || activity?.description,900), courseTime:tdeaShowcaseText(activity?.courseTime,120), deadline:tdeaShowcaseText(activity?.deadline,120), capacity:Math.max(0,Number(activity?.capacity)||0), imageUrl:tdeaShowcaseUrl(activity?.posterUrl || activity?.imageUrl || activity?.formSettings?.posterUrl), registrationUrl:tdeaShowcaseUrl(activity?.nativeFormUrl || activity?.formUrl || activity?.formSettings?.nativeFormUrl) }))
     .filter((activity) => activity.id && activity.title).slice(0,24);
-  const vendors = (Array.isArray(vendorPayload?.data?.items) ? vendorPayload.data.items : [])
-    .filter((vendor) => vendor?.enabled !== false)
-    .map((vendor) => ({ id:tdeaShowcaseText(vendor?.id,160), name:tdeaShowcaseText(vendor?.label || vendor?.name || vendor?.actionText,120), imageUrl:tdeaShowcaseUrl(vendor?.imageUrl) }))
-    .filter((vendor) => vendor.id && vendor.name && vendor.imageUrl).slice(0,48);
-  return { activities, vendors };
+  const marquee = marqueePayload?.data || {};
+  const ads = (Array.isArray(marquee?.imageItems) ? marquee.imageItems : [])
+    .filter((item) => item?.enabled !== false)
+    .map((item) => ({ id:tdeaShowcaseText(item?.id,160), title:tdeaShowcaseText(item?.title || marquee?.title || "TDEA 廣告贈點",120), imageUrl:tdeaShowcaseUrl(item?.imageUrl), points:Math.max(1,Number(item?.points)||1) }))
+    .filter((item) => item.id && item.imageUrl).slice(0,20);
+  return { activities, ads, adLiffUrl:tdeaShowcaseUrl(marqueePayload?.liffUrl) };
 }
 function decodeYoutubeXml(value = "") {
   return String(value)
