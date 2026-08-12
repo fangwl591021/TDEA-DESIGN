@@ -1561,12 +1561,29 @@ async function daily(targetSelector = "") {
     target.innerHTML = markup;
     return true;
   };
-  const renderTabs = (campaigns = []) => campaigns.length ? `<div class="daily-top-tabs" role="tablist">${campaigns.map((campaign) => `<button type="button" class="daily-top-tab ${state.dailyCampaignId === campaign.id ? "active" : ""}" data-daily-campaign="${esc(campaign.id)}">${esc(campaign.name || "簽到活動")}</button>`).join("")}</div>` : "";
+  const panelTabs = `<div class="daily-top-tabs daily-panel-tabs" role="tablist" aria-label="TDEA 服務"><button type="button" class="daily-top-tab ${state.dailyPanel === "checkin" ? "active" : ""}" data-daily-panel="checkin">每日簽到</button><button type="button" class="daily-top-tab ${state.dailyPanel === "activities" ? "active" : ""}" data-daily-panel="activities">活動報名</button><button type="button" class="daily-top-tab ${state.dailyPanel === "vendors" ? "active" : ""}" data-daily-panel="vendors">廠商輪播</button></div>`;
+  const renderTabs = (campaigns = []) => campaigns.length ? `<div class="daily-top-tabs daily-campaign-tabs" role="tablist" aria-label="簽到活動">${campaigns.map((campaign) => `<button type="button" class="daily-top-tab ${state.dailyCampaignId === campaign.id ? "active" : ""}" data-daily-campaign="${esc(campaign.id)}">${esc(campaign.name || "簽到活動")}</button>`).join("")}</div>` : "";
   const bindTabs = () => {
-    getDailyRoot()?.querySelectorAll("[data-daily-campaign]").forEach((button) => {
-      button.onclick = () => { state.dailyPanel = "checkin"; state.dailyCampaignId = button.dataset.dailyCampaign; daily(targetSelector); };
-    });
+    getDailyRoot()?.querySelectorAll("[data-daily-panel]").forEach((button) => { button.onclick = () => { state.dailyPanel = button.dataset.dailyPanel || "checkin"; daily(targetSelector); }; });
+    getDailyRoot()?.querySelectorAll("[data-daily-campaign]").forEach((button) => { button.onclick = () => { state.dailyPanel = "checkin"; state.dailyCampaignId = button.dataset.dailyCampaign; daily(targetSelector); }; });
   };
+  if (state.dailyPanel !== "checkin") {
+    try {
+      const showcase = await api("/v1/tdea-showcase");
+      const activities = Array.isArray(showcase.activities) ? showcase.activities : [];
+      const vendors = Array.isArray(showcase.vendors) ? showcase.vendors : [];
+      const activityMarkup = activities.length ? `<section class="tdea-activity-grid">${activities.map((activity) => `<article class="card tdea-activity-card">${activity.imageUrl ? `<img src="${esc(activity.imageUrl)}" alt="${esc(activity.title)}" loading="lazy">` : ""}<div><small>${esc(activity.courseTime || "TDEA 活動")}</small><h2>${esc(activity.title)}</h2><p>${esc(activity.description || "活動資訊請見報名頁")}</p><footer>${activity.deadline ? `<span>報名截止：${esc(activity.deadline)}</span>` : ""}${activity.capacity ? `<span>名額：${esc(activity.capacity)}</span>` : ""}</footer>${activity.registrationUrl ? `<a class="btn" href="${esc(activity.registrationUrl)}" target="_blank" rel="noopener noreferrer">我要報名</a>` : ""}</div></article>`).join("")}</section>` : `<div class="card muted">目前沒有公開活動。</div>`;
+      const vendorMarkup = vendors.length ? `<section class="tdea-vendor-carousel" aria-label="TDEA 廠商輪播">${vendors.map((vendor) => `<article class="tdea-vendor-card"><img src="${esc(vendor.imageUrl)}" alt="${esc(vendor.name)}" loading="lazy"><strong>${esc(vendor.name)}</strong></article>`).join("")}</section>` : `<div class="card muted">目前沒有可展示的廠商。</div>`;
+      if (!renderDaily(`${panelTabs}${state.dailyPanel === "activities" ? activityMarkup : vendorMarkup}`)) return;
+      bindTabs();
+      const carousel = getDailyRoot()?.querySelector(".tdea-vendor-carousel");
+      if (carousel && vendors.length > 1) dailyRotationTimer = setInterval(() => { if (document.visibilityState === "visible") carousel.scrollBy({ left:Math.max(180, carousel.clientWidth*.72), behavior:"smooth" }); }, 4000);
+      return;
+    } catch (error) {
+      if (!renderDaily(`${panelTabs}<div class="card muted">${esc(error.message || "TDEA 內容暫時無法載入")}</div>`)) return;
+      bindTabs(); return;
+    }
+  }
   const query = state.dailyCampaignId ? `?campaignId=${encodeURIComponent(state.dailyCampaignId)}` : "";
   const r = await api(`/v1/daily-ad${query}`);
   const campaigns = r.campaigns || [];
@@ -1578,13 +1595,13 @@ async function daily(targetSelector = "") {
   state.daily = { ...r, campaigns };
   const tabs = renderTabs(campaigns);
   if (!r.campaign) {
-    if (!renderDaily(`${tabs}<div class="card">今天沒有輪播簽到活動。</div>`)) return;
+    if (!renderDaily(`${panelTabs}${tabs}<div class="card">今天沒有輪播簽到活動。</div>`)) return;
     bindTabs();
     return;
   }
   const completed = new Set(r.qualifiedCreativeIds || []);
   if (!r.creatives.length) {
-    if (!renderDaily(`${tabs}<div class="card">此輪播活動尚未設定素材。</div>`)) return;
+    if (!renderDaily(`${panelTabs}${tabs}<div class="card">此輪播活動尚未設定素材。</div>`)) return;
     bindTabs();
     return;
   }
@@ -1607,7 +1624,7 @@ async function daily(targetSelector = "") {
     const watchLabel = completed.has(creative.id) ? "已完成" : "開始<br>觀看";
     return `<article class="daily-slide ${completed.has(creative.id) ? "complete" : ""}" data-creative-id="${esc(creative.id)}" style="--bubble-width:${bubbleWidth}">${media}<div class="daily-slide-body"><div class="daily-actions"><button class="btn watch-button" data-watch="${esc(creative.id)}" ${completed.has(creative.id) ? "disabled" : ""}>${watchLabel}</button>${detailButton}</div>${extraButtons ? `<div class="daily-extra-actions">${extraButtons}</div>` : ""}<p class="muted watch-status"></p></div></article>`;
   };
-  if (!renderDaily(`${tabs}<div class="daily-carousel" aria-label="每日輪播活動">${cards.map(cardHtml).join("")}</div><button class="btn ${r.checkedIn ? "alt" : ""}" id="checkin" ${!r.checkedIn && r.qualifiedCreativeCount < r.campaign.requiredCreativeCount ? "disabled" : ""}>${r.checkedIn ? "今日已簽到（確認點數）" : `今日簽到（已完成 ${r.qualifiedCreativeCount}/${r.campaign.requiredCreativeCount} 項）`}</button>`)) return;
+  if (!renderDaily(`${panelTabs}${tabs}<div class="daily-carousel" aria-label="每日輪播活動">${cards.map(cardHtml).join("")}</div><button class="btn ${r.checkedIn ? "alt" : ""}" id="checkin" ${!r.checkedIn && r.qualifiedCreativeCount < r.campaign.requiredCreativeCount ? "disabled" : ""}>${r.checkedIn ? "今日已簽到（確認點數）" : `今日簽到（已完成 ${r.qualifiedCreativeCount}/${r.campaign.requiredCreativeCount} 項）`}</button>`)) return;
   const dailyRoot = getDailyRoot();
   bindTabs();
   dailyRoot.querySelectorAll("[data-watch]").forEach((button) => {

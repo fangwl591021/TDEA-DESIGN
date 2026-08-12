@@ -530,6 +530,41 @@ async function boundedResponseText(response, maxBytes = 524288) {
   }
 }
 
+const TDEA_SHOWCASE_MAX_BYTES = 2 * 1024 * 1024;
+
+function tdeaShowcaseText(value, maxLength = 1200) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function tdeaShowcaseUrl(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return ["https:", "http:"].includes(url.protocol) ? url.toString() : "";
+  } catch {
+    return "";
+  }
+}
+
+async function fetchTdeaShowcase(env) {
+  if (!env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== "function") throw new Error("TDEA service binding is unavailable");
+  const requestOptions = { headers: { accept: "application/json" } };
+  const [managerResponse, vendorResponse] = await Promise.all([
+    env.TDEA_WORKER.fetch("https://tdea.internal/api/manager-data", requestOptions),
+    env.TDEA_WORKER.fetch("https://tdea.internal/api/vendor-card-menu", requestOptions),
+  ]);
+  if (!managerResponse.ok || !vendorResponse.ok) throw new Error("TDEA showcase source is unavailable");
+  const managerPayload = JSON.parse(await boundedResponseText(managerResponse, TDEA_SHOWCASE_MAX_BYTES));
+  const vendorPayload = JSON.parse(await boundedResponseText(vendorResponse, TDEA_SHOWCASE_MAX_BYTES));
+  const activities = (Array.isArray(managerPayload?.data?.activities) ? managerPayload.data.activities : [])
+    .filter((activity) => tdeaShowcaseText(activity?.status, 20) === "上架")
+    .map((activity) => ({ id:tdeaShowcaseText(activity?.id,160), title:tdeaShowcaseText(activity?.name,180), description:tdeaShowcaseText(activity?.detailText || activity?.description,900), courseTime:tdeaShowcaseText(activity?.courseTime,120), deadline:tdeaShowcaseText(activity?.deadline,120), capacity:Math.max(0,Number(activity?.capacity)||0), imageUrl:tdeaShowcaseUrl(activity?.posterUrl || activity?.imageUrl || activity?.formSettings?.posterUrl), registrationUrl:tdeaShowcaseUrl(activity?.nativeFormUrl || activity?.formUrl || activity?.formSettings?.nativeFormUrl) }))
+    .filter((activity) => activity.id && activity.title).slice(0,24);
+  const vendors = (Array.isArray(vendorPayload?.data?.items) ? vendorPayload.data.items : [])
+    .filter((vendor) => vendor?.enabled !== false)
+    .map((vendor) => ({ id:tdeaShowcaseText(vendor?.id,160), name:tdeaShowcaseText(vendor?.label || vendor?.name || vendor?.actionText,120), imageUrl:tdeaShowcaseUrl(vendor?.imageUrl) }))
+    .filter((vendor) => vendor.id && vendor.name && vendor.imageUrl).slice(0,48);
+  return { activities, vendors };
+}
 function decodeYoutubeXml(value = "") {
   return String(value)
     .replace(/&amp;/g, "&")
@@ -2591,6 +2626,16 @@ async function app(request, env, ctx) {
     return json({ success: false, error: "Admin endpoint not found" }, 404);
   }
 
+  if (request.method === "GET" && url.pathname === "/v1/tdea-showcase") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    try {
+      return json({ success: true, ...(await fetchTdeaShowcase(env)) });
+    } catch (error) {
+      console.error("TDEA showcase fetch failed", { error: String(error) });
+      return json({ success: false, error: "TDEA 內容暫時無法載入" }, 502);
+    }
+  }
   if (request.method === "GET" && url.pathname === "/v1/courses") {
     try {
       await syncMlmCourses(env);
