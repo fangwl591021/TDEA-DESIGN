@@ -1,0 +1,53 @@
+name: Add registered member profile to point service once
+on:
+  push:
+    branches:
+      - agent/full-project-transplant
+    paths:
+      - .github/workflows/add-member-profile-to-point-service-once.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Patch member profile into internal point read
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('src/tdea-point-service.js')
+          s = p.read_text(encoding='utf-8')
+          old_import = "import { newId, resolveCanonicalMemberId, resolveLineMember } from './member-repository.js';"
+          new_import = "import { getMember, newId, resolveCanonicalMemberId, resolveLineMember } from './member-repository.js';"
+          if old_import not in s:
+              raise SystemExit('member repository import anchor not found')
+          s = s.replace(old_import, new_import, 1)
+          old = """    const wallet = await getWallet(env.DB, userId);\n    return json({ success: true, userId, lineUserId, ...wallet });"""
+          new = """    const wallet = await getWallet(env.DB, userId);\n    const member = await getMember(env.DB, userId);\n    return json({\n      success: true,\n      userId,\n      lineUserId,\n      registered: Boolean(member?.profileCompletedAt),\n      member: member ? {\n        userId: member.userId,\n        displayName: member.displayName || '',\n        fullName: member.fullName || '',\n        phone: member.phone || '',\n        email: member.email || '',\n        memberNumber: member.memberNumber || '',\n        memberType: member.memberType || 'general',\n        rosterMemberNumber: member.rosterMemberNumber || '',\n        companyMemberNumber: member.companyMemberNumber || '',\n        rosterVerifiedAt: member.rosterVerifiedAt || '',\n        rosterVerifiedName: member.rosterVerifiedName || '',\n        profileCompletedAt: member.profileCompletedAt || ''\n      } : null,\n      ...wallet\n    });"""
+          if old not in s:
+              raise SystemExit('point GET response anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8', newline='')
+          PY
+      - name: Verify focused patch
+        shell: bash
+        run: |
+          node --check src/tdea-point-service.js
+          grep -q "registered: Boolean(member?.profileCompletedAt)" src/tdea-point-service.js
+          grep -q "memberType: member.memberType" src/tdea-point-service.js
+          git diff --check
+      - name: Commit and cleanup
+        shell: bash
+        run: |
+          git config user.name "fangwl591021"
+          git config user.email "50135766+fangwl591021@users.noreply.github.com"
+          git add src/tdea-point-service.js
+          git commit -m "Expose registered member profile to tdea worker"
+          git rm .github/workflows/add-member-profile-to-point-service-once.yml
+          git commit -m "Remove one-time member profile bridge workflow"
+          git push origin agent/full-project-transplant
