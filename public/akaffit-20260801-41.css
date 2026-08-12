@@ -197,7 +197,7 @@ main#app:has(.ak-dashboard)>.content{box-sizing:border-box;height:100%;min-heigh
 .ak-task-all{display:grid;width:100%;min-height:44px;place-items:center;margin-top:5px;border:1px solid #dfaa8e;border-radius:10px;background:var(--ak-soft);color:var(--ak-primary);font:850 12px/1 inherit;cursor:pointer}
 .ak-home-content{display:flex;flex-direction:column;width:100%;height:auto;min-height:0;padding:0;overflow:hidden;overscroll-behavior:contain;background:#fff}
 .ak-frozen-nav{position:relative;z-index:20;display:block;flex:0 0 auto;border-bottom:1px solid #ead7cc;background:var(--ak-cream);box-shadow:none}
-.ak-frozen-nav .ak-feature-grid{position:relative;z-index:auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;width:100%;padding:3px 4px 2px;border:0;background:var(--ak-cream);box-shadow:none;overflow:visible}
+.ak-frozen-nav .ak-feature-grid{position:relative;z-index:auto;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:0;width:100%;margin:0;padding:3px 0 2px;border:0;background:var(--ak-cream);box-shadow:none;overflow:visible}
 .ak-frozen-nav .ak-feature-grid button{display:grid;min-width:0;min-height:62px;place-items:center;align-content:center;gap:4px;padding:4px 1px;border:0;border-radius:9px;background:transparent;color:var(--ak-deep);font:inherit;cursor:pointer}
 .ak-frozen-nav .ak-feature-grid button:active{background:var(--ak-soft)}
 .ak-feature-grid svg{width:23px;height:23px;fill:none;stroke:currentColor;stroke-width:1.65;stroke-linecap:round;stroke-linejoin:round}
