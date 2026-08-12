@@ -9,8 +9,8 @@ const worker = readFileSync(new URL("../src/index.js", import.meta.url), "utf8")
 const wrangler = readFileSync(new URL("../wrangler.jsonc", import.meta.url), "utf8");
 
 test("personal cards use the dedicated LIFF share app without replacing member login", () => {
-  assert.match(wrangler, /"LIFF_ID": "2010925044-KXzQzB5r"/);
-  assert.match(wrangler, /"CARD_SHARE_LIFF_ID": "2010925044-hPtKkoKO"/);
+  assert.match(wrangler, /"LIFF_ID": "2005868456-3Ip8H1Bx"/);
+  assert.match(wrangler, /"CARD_SHARE_LIFF_ID": "2005868456-3Ip8H1Bx"/);
   assert.match(worker, /cardShareLiffId: env\.CARD_SHARE_LIFF_ID \|\| env\.LIFF_ID \|\| ""/);
   assert.match(app, /state\.cardShareMode[\s\S]*state\.config\?\.cardShareLiffId \|\| state\.config\?\.liffId/);
   assert.match(app, /function cardSharePickerUrl\(cardId, card = null\)[\s\S]*state\.config\?\.cardShareLiffId \|\| state\.config\?\.liffId/);

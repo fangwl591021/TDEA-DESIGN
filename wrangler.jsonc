@@ -20,7 +20,7 @@
     {
       "binding": "DB",
       "database_name": "tdea_design_crm",
-      "database_id": "REPLACE_WITH_TDEA_D1_DATABASE_ID",
+      "database_id": "7518faf2-a05a-4f25-996f-6968d4c92c72",
       "migrations_dir": "migrations"
     }
   ],
