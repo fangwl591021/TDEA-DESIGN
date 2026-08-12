@@ -1,0 +1,63 @@
+name: Wire TDEA point service bridge once
+
+on:
+  push:
+    branches:
+      - fix/tdea-point-service-bridge
+    paths:
+      - .github/workflows/tdea-point-service-bridge-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/tdea-point-service-bridge
+          fetch-depth: 0
+
+      - name: Wire internal point service
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('src/index.js')
+          data = path.read_text(encoding='utf-8')
+
+          old_import = 'import { adjustPoints, awardPoints, getWallet } from "./points.js";\n'
+          new_import = old_import + 'import { handleTdeaPointService } from "./tdea-point-service.js";\n'
+          if data.count(old_import) != 1:
+              raise SystemExit(f'points import target count={data.count(old_import)}')
+          data = data.replace(old_import, new_import, 1)
+
+          old_app = 'async function app(request, env, ctx) {\n  const url = new URL(request.url);\n'
+          new_app = old_app + '  const tdeaPointResponse = await handleTdeaPointService(request, env);\n  if (tdeaPointResponse) return tdeaPointResponse;\n'
+          if data.count(old_app) != 1:
+              raise SystemExit(f'app target count={data.count(old_app)}')
+          data = data.replace(old_app, new_app, 1)
+
+          path.write_text(data, encoding='utf-8')
+          PY
+
+      - name: Verify minimal bridge
+        shell: bash
+        run: |
+          node --check src/tdea-point-service.js
+          node --check src/index.js
+          git diff --stat
+          git diff -- src/index.js | sed -n '1,100p'
+          test "$(git diff --name-only | sort)" = "src/index.js"
+          grep -q 'handleTdeaPointService' src/index.js
+
+      - name: Commit patch and remove workflow
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/index.js
+          git rm .github/workflows/tdea-point-service-bridge-once.yml
+          git commit -m 'Wire TDEA internal point service'
+          git push origin HEAD:fix/tdea-point-service-bridge
