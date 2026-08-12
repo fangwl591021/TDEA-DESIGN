@@ -28,6 +28,7 @@ test("內頁功能列移除返回首頁，並將返回首頁放在共用 Banner"
   assert.ok(layout.includes('class="feature-header-actions"'));
   assert.ok(layout.includes('class="feature-header-action feature-home-action" data-home-action="home"'));
   assert.ok(layout.includes('<span>返回首頁</span>'));
+  assert.ok(!layout.includes('data-home-action="cardCollection">名片收藏</button>'));
   assert.ok(layout.includes('daily:["TDEA 每日簽到"'));
   assert.equal((app.match(/data-home-action="home"/g) || []).length, 1);
   const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
