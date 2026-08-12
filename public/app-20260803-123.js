@@ -2795,7 +2795,9 @@ function profileFormMarkup(required = false) {
     <p class="muted">請補齊基本資料，完成後即可使用會員中心。</p>
     <div class="member-logo-upload"><div class="member-logo-preview">${logo}</div><div><strong>Logo 圖片</strong><label class="btn alt member-logo-button">選擇圖片<input id="memberLogoFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><small>JPEG、PNG、WebP，最大 3MB</small></div></div>
     <label>顯示名稱</label><input id="displayName" value="${esc(state.member.displayName || "")}" maxlength="120" required>
-    <label>姓名</label><input id="fullName" value="${esc(state.member.fullName || "")}" maxlength="120" autocomplete="name" required>
+    <label>會員類型</label><select id="memberType" required><option value="">請選擇</option><option value="general" ${state.member.memberType === "general" ? "selected" : ""}>一般會員</option><option value="association" ${state.member.memberType === "association" ? "selected" : ""}>協會會員</option><option value="vendor" ${state.member.memberType === "vendor" ? "selected" : ""}>廠商會員</option></select>
+    <label>姓名／公司名稱</label><input id="fullName" value="${esc(state.member.fullName || "")}" maxlength="120" autocomplete="name" required>
+    <div id="rosterMemberNumberField"><label>會員編號</label><input id="rosterMemberNumber" value="${esc(state.member.rosterMemberNumber || "")}" maxlength="80" autocomplete="off"><small>協會會員與廠商會員必填，系統會到 TDEA 正式名冊核對。</small></div>
     <label>生日密碼（民國年月日）</label><input id="birthday" type="text" inputmode="numeric" value="${esc(birthdayPassword(state.member.birthday))}" placeholder="例如 591021、390305" pattern="[0-9]{6,7}" maxlength="7" required>
     <label>性別</label><select id="gender" required><option value="">請選擇</option><option value="female" ${state.member.gender === "female" ? "selected" : ""}>女性</option><option value="male" ${state.member.gender === "male" ? "selected" : ""}>男性</option><option value="other" ${state.member.gender === "other" ? "selected" : ""}>其他</option><option value="prefer_not_to_say" ${state.member.gender === "prefer_not_to_say" ? "selected" : ""}>不透露</option></select>
     <div class="member-social-heading"><label>社群連結</label><button type="button" id="addSocialLink">＋ 新增</button></div>
@@ -2813,6 +2815,14 @@ function closeProfileDialog(dialog = document.querySelector(".ak-profile-dialog"
 function bindProfileForm(dialog, required = false) {
   const q = (selector) => dialog.querySelector(selector);
   bindSocialLinkRows(dialog);
+  const syncRosterRequirement = () => {
+    const requiredRoster = ["association", "vendor"].includes(q("#memberType").value);
+    q("#rosterMemberNumberField").hidden = !requiredRoster;
+    q("#rosterMemberNumber").required = requiredRoster;
+    if (!requiredRoster) q("#rosterMemberNumber").value = "";
+  };
+  q("#memberType").onchange = syncRosterRequirement;
+  syncRosterRequirement();
   q("#addSocialLink").onclick = () => {
     if (dialog.querySelectorAll(".member-social-row").length >= 10) return alert("最多可新增 10 組社群連結");
     q("#memberSocialLinks").insertAdjacentHTML("beforeend", socialLinkRow());
@@ -2829,7 +2839,9 @@ function bindProfileForm(dialog, required = false) {
     const button = q("#save");
     const birthday = birthdayPassword(q("#birthday").value);
     if (!q("#displayName").value.trim()) return alert("請輸入顯示名稱");
-    if (!q("#fullName").value.trim()) return alert("請輸入姓名");
+    if (!q("#fullName").value.trim()) return alert("請輸入姓名／公司名稱");
+    if (!q("#memberType").value) return alert("請選擇會員類型");
+    if (["association", "vendor"].includes(q("#memberType").value) && !q("#rosterMemberNumber").value.trim()) return alert("協會會員與廠商會員必須填寫會員編號");
     if (!/^\d{6,7}$/.test(birthday)) return alert("生日密碼請輸入民國年月日，例如 591021、390305");
     if (!q("#gender").value) return alert("請選擇性別");
     const socialLinks = [...dialog.querySelectorAll(".member-social-row")].map((row) => ({
@@ -2853,6 +2865,8 @@ function bindProfileForm(dialog, required = false) {
           body:JSON.stringify({
             displayName:q("#displayName").value,
             fullName:q("#fullName").value,
+            memberType:q("#memberType").value,
+            memberNumber:q("#rosterMemberNumber").value,
             gender:q("#gender").value,
             birthday,
             socialLinks,
