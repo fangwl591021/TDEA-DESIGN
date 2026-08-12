@@ -10,7 +10,7 @@ test("home exposes daily check-in and the directly imported official site", () =
   assert.match(home, /data-home-inline="daily" aria-pressed="false"/);
   assert.match(home, /id="homeDailyPanel" class="ak-daily-panel ak-content-panel hidden" data-content-panel="daily"/);
   assert.match(home, /await daily\("#homeDailyPanel"\)/);
-  assert.match(home, /class="ak-official-import ak-content-panel"/);
+  assert.match(home, /class="ak-official-import ak-content-panel hidden"/);
   assert.match(home, /class="ak-official-import-frame"/);
   assert.match(home, /src="\/akaffit-official"/);
   assert.match(home, /data-content-view="youtube"><svg[\s\S]*?<span>YouTube<\/span>/);
