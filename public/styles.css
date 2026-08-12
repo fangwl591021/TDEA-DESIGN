@@ -219,7 +219,7 @@ main#app>*,.content,.business-card,.business-card-detail,.line-source-ecard,.lin
 
 
 /* Personal calendar: MLM is the source of truth; member-specific status stays local. */
-.portal-menu{grid-template-columns:repeat(6,minmax(0,1fr))}
+.portal-menu{grid-template-columns:repeat(5,minmax(0,1fr))}
 .portal-menu button{font-size:11px}
 .personal-calendar-card,.personal-calendar-agenda{margin:14px 0;border:1px solid #eadde1;border-radius:18px;background:#fff;box-shadow:0 8px 24px #5b23300a;overflow:hidden}
 .personal-calendar-toolbar{display:grid;grid-template-columns:44px 1fr 44px;align-items:center;padding:16px 14px;background:linear-gradient(135deg,#fff9f5,#f7fff9);text-align:center}
@@ -390,7 +390,7 @@ main#app>*,.content,.business-card,.business-card-detail,.line-source-ecard,.lin
 }
 .portal-menu-text .portal-menu-icon{display:none!important}
 @media(min-width:720px){
-  .portal-menu-text{grid-template-columns:repeat(6,minmax(0,1fr))}
+  .portal-menu-text{grid-template-columns:repeat(5,minmax(0,1fr))}
 }
 @media(max-width:420px){
   .portal-menu-text button{font-size:14px}

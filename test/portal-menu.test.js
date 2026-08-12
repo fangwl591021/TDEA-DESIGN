@@ -4,7 +4,7 @@ import test from "node:test";
 
 const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
 
-test("內頁功能列移除星座與 AI 任務，返回首頁放在下方功能列", () => {
+test("內頁功能列移除返回首頁，並將返回首頁放在共用 Banner", () => {
   const start = app.indexOf("const portalMenu");
   const end = app.indexOf("function openAiWear", start);
   const menu = app.slice(start, end);
@@ -16,10 +16,9 @@ test("內頁功能列移除星座與 AI 任務，返回首頁放在下方功能�
     "daily",
     "smartMatch",
     "calendar",
-    "home",
   ]);
   assert.ok(menu.includes('data-home-action="cardCollection"><span>名片收藏</span></button><button data-home-action="card"><span>電子名片</span>'));
-  assert.ok(menu.includes('data-home-action="calendar"><span>個人行程</span></button><button data-home-action="home"><span>返回首頁</span>'));
+  assert.ok(menu.includes('data-home-action="calendar"><span>個人行程</span></button></section>'));
   assert.ok(!menu.includes('data-home-action="zodiac"'));
   assert.ok(!menu.includes('data-home-action="tasks"'));
 
@@ -27,8 +26,11 @@ test("內頁功能列移除星座與 AI 任務，返回首頁放在下方功能�
   const layoutEnd = app.indexOf("async function login", layoutStart);
   const layout = app.slice(layoutStart, layoutEnd);
   assert.ok(layout.includes('class="feature-header-actions"'));
-  assert.ok(layout.includes('const headerActions = cardCollectionAction ?'));
-  assert.ok(!layout.includes('feature-home-action'));
+  assert.ok(layout.includes('class="feature-header-action feature-home-action" data-home-action="home"'));
+  assert.ok(layout.includes('<span>返回首頁</span>'));
+  assert.ok(layout.includes('daily:["TDEA 每日簽到"'));
   assert.equal((app.match(/data-home-action="home"/g) || []).length, 1);
+  const styles = readFileSync(new URL("../public/styles.css", import.meta.url), "utf8");
+  assert.match(styles, /\.portal-menu-text\{grid-template-columns:repeat\(5/);
   assert.ok(!app.includes('class="back-card" data-home-action="home"'));
 });

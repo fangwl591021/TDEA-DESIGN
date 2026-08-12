@@ -234,10 +234,11 @@ function avatar(member = state.member) {
     : `<span class="avatar placeholder">${esc((member?.displayName || "L").slice(0, 1))}</span>`;
 }
 function layout(body) {
-  const featureCopy = { wallet:["點數錢包","查看目前可用點數與交易紀錄。"], courses:["課程活動","查看課程、完成報名與簽到。"], daily:[state.daily?.campaign?.name || "簽到贈點活動",`向左滑動輪播卡；完成 ${Number(state.daily?.campaign?.requiredCreativeCount) || 0} 項觀看後，即可每日簽到。`], card:["我的名片","編輯並分享你的專屬數位名片。"], zodiac:["星座命理","整合星座、生肖、生命靈數與 AI，提供今日導航。"], cardCollection:["名片收藏","掃描、整理並搜尋你的私人名片簿。"], smartMatch:["智能配對","輸入合作需求，從你的名片收藏中找出適合的人選。"], calendar:["個人行程","管理個人行程、聯絡人生日與提醒。"], tasks:["AI 任務中心","提醒、執行、回報、分析，再自動形成下一步。"], profile:["會員資料","管理你的會員資料與個人資訊。"] };
+  const featureCopy = { wallet:["點數錢包","查看目前可用點數與交易紀錄。"], courses:["課程活動","查看課程、完成報名與簽到。"], daily:["TDEA 每日簽到",`向左滑動輪播卡；完成 ${Number(state.daily?.campaign?.requiredCreativeCount) || 0} 項觀看後，即可每日簽到。`], card:["我的名片","編輯並分享你的專屬數位名片。"], zodiac:["星座命理","整合星座、生肖、生命靈數與 AI，提供今日導航。"], cardCollection:["名片收藏","掃描、整理並搜尋你的私人名片簿。"], smartMatch:["智能配對","輸入合作需求，從你的名片收藏中找出適合的人選。"], calendar:["個人行程","管理個人行程、聯絡人生日與提醒。"], tasks:["AI 任務中心","提醒、執行、回報、分析，再自動形成下一步。"], profile:["會員資料","管理你的會員資料與個人資訊。"] };
   const [featureTitle,featureHint] = featureCopy[state.tab] || ["康立行動入口","會員服務與活動入口。"];
   const cardCollectionAction = state.tab === "card" ? `<button class="feature-header-action" data-home-action="cardCollection">名片收藏</button>` : "";
-  const headerActions = cardCollectionAction ? `<div class="feature-header-actions">${cardCollectionAction}</div>` : "";
+  const homeAction = `<button class="feature-header-action feature-home-action" data-home-action="home" aria-label="返回首頁"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 11 8-7 8 7v9h-6v-6h-4v6H4z"/></svg><span>返回首頁</span></button>`;
+  const headerActions = `<div class="feature-header-actions">${cardCollectionAction}${homeAction}</div>`;
   const featureHeader = `<header class="hero member-hero feature-member-hero"><div class="daily-banner-profile">${avatar()}<strong>${esc(state.member?.displayName || "LINE 會員")}</strong></div><div class="daily-banner-copy"><h1>${esc(featureTitle)}</h1><p>${esc(featureHint)}</p></div>${headerActions}</header>`;
   const memberHeader = state.tab === "home" ? "" : featureHeader;
   $("#app").innerHTML =
@@ -1004,7 +1005,7 @@ async function taskCenter(){
     const focusId=new URLSearchParams(location.search).get("task");if(focusId)setTimeout(()=>document.querySelector(`[data-task-id="${CSS.escape(focusId)}"]`)?.scrollIntoView({behavior:"smooth",block:"center"}),50);
   }catch(error){layout(`<section class="card task-engine-loading"><h2>任務中心讀取失敗</h2><p class="muted">${esc(error.message||"暫時無法讀取任務")}</p><button class="btn" id="retryTasks">重新載入</button></section>`);$("#retryTasks").onclick=taskCenter}
 }
-const portalMenu = () => `<section class="portal-menu portal-menu-compact portal-menu-text" aria-label="會員功能"><button data-home-action="cardCollection"><span>名片收藏</span></button><button data-home-action="card"><span>電子名片</span></button><button data-home-action="daily"><span>每日簽到</span></button><button data-home-action="smartMatch"><span>智能配對</span></button><button data-home-action="calendar"><span>個人行程</span></button><button data-home-action="home"><span>返回首頁</span></button></section>`;
+const portalMenu = () => `<section class="portal-menu portal-menu-compact portal-menu-text" aria-label="會員功能"><button data-home-action="cardCollection"><span>名片收藏</span></button><button data-home-action="card"><span>電子名片</span></button><button data-home-action="daily"><span>每日簽到</span></button><button data-home-action="smartMatch"><span>智能配對</span></button><button data-home-action="calendar"><span>個人行程</span></button></section>`;
 function openAiWear(){try{if(window.liff?.isInClient?.()){window.liff.openWindow({url:AI_WEAR_LIFF_URL,external:false});return}}catch{/* Fall back to direct LIFF navigation. */}window.location.href=AI_WEAR_LIFF_URL}
 function openOfficialSite(page="home"){
   document.querySelector("#officialSiteOverlay")?.remove();
