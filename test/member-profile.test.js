@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import { normalizeBirthday } from "../src/member-repository.js";
+import { normalizeBirthday, normalizeTaiwanMobile } from "../src/member-repository.js";
 
 test("birthday verification accepts ROC birthday passwords and keeps Gregorian compatibility", () => {
   assert.equal(normalizeBirthday("591021"), "1970-10-21");
@@ -13,11 +13,21 @@ test("birthday verification accepts ROC birthday passwords and keeps Gregorian c
   assert.throws(() => normalizeBirthday("20260230"), /日期無效/);
 });
 
+test("member registration requires and normalizes a Taiwan mobile number", () => {
+  assert.equal(normalizeTaiwanMobile("0912-345-678"), "0912345678");
+  assert.equal(normalizeTaiwanMobile("+886 912 345 678"), "0912345678");
+  assert.throws(() => normalizeTaiwanMobile("02-12345678"), /正確的台灣行動電話/);
+  assert.throws(() => normalizeTaiwanMobile(""), /正確的台灣行動電話/);
+});
+
 test("member registration UI includes logo, name, numeric birthday, and repeatable social links", () => {
   const app = fs.readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
   assert.match(app, /id="memberLogoFile"/);
   assert.match(app, /id="displayName"/);
   assert.match(app, /id="fullName"/);
+  assert.match(app, /id="phone" type="tel"[^>]*required/);
+  assert.match(app, /請輸入正確的台灣行動電話/);
+  assert.match(app, /phone,/);
   assert.match(app, /id="memberType" required/);
   assert.match(app, />一般會員</);
   assert.match(app, />協會會員</);

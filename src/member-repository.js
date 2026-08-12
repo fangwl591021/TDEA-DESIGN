@@ -181,11 +181,15 @@ export function normalizeBirthday(rawBirthday) {
   return birthday;
 }
 
-export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, inviteToken = '', intent = 'auto') {
+export function normalizeTaiwanMobile(rawPhone) {
   const phone = String(rawPhone || '').replace(/[^\d+]/g, '').slice(0, 20);
+  if (!/^(?:\+886|0)9\d{8}$/.test(phone)) throw new Error('請輸入正確的台灣行動電話');
+  return phone.startsWith('+886') ? '0' + phone.slice(4) : phone;
+}
+
+export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, inviteToken = '', intent = 'auto') {
+  const normalizedPhone = normalizeTaiwanMobile(rawPhone);
   const birthday = normalizeBirthday(rawBirthday);
-  if (!/^(?:\+886|0)9\d{8}$/.test(phone)) throw new Error('請輸入正確的台灣手機號碼');
-  const normalizedPhone = phone.startsWith('+886') ? `0${phone.slice(4)}` : phone;
   const subject = await sha256(`${normalizedPhone}|${birthday}`);
   let existing = await db.prepare(`
     SELECT COALESCE(maa.canonical_user_id, ei.platform_user_id) AS user_id
@@ -298,6 +302,7 @@ export async function getMember(db, userId) {
 export async function updateMemberProfile(db, userId, profile, rosterVerification) {
   const displayName = String(profile.displayName || '').trim().slice(0, 120);
   const fullName = String(profile.fullName || '').trim().slice(0, 120);
+  const phone = normalizeTaiwanMobile(profile.phone);
   const gender = String(profile.gender || '').trim();
   const birthday = normalizeBirthday(profile.birthday);
   const companyMemberNumber = String(profile.companyMemberNumber || '').trim().slice(0, 80);
@@ -323,10 +328,22 @@ export async function updateMemberProfile(db, userId, profile, rosterVerificatio
     try { parsed = new URL(item.url); } catch { throw new Error(`「${item.label}」的社群網址格式不正確`); }
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(`「${item.label}」的社群網址必須以 http:// 或 https:// 開頭`);
   }
+  const currentProfile = await db.prepare('SELECT phone FROM member_profiles WHERE platform_user_id = ?').bind(userId).first();
+  if (currentProfile?.phone && normalizeTaiwanMobile(currentProfile.phone) !== phone) {
+    throw new Error('行動電話如需變更，請聯絡管理員');
+  }
+  const phoneOwner = await db.prepare(`
+    SELECT mp.platform_user_id
+    FROM member_profiles mp
+    JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'
+    WHERE mp.phone = ? AND mp.platform_user_id <> ?
+    LIMIT 1
+  `).bind(phone, userId).first();
+  if (phoneOwner) throw new Error('此行動電話已由其他會員使用');
   await db.prepare(`
-    UPDATE member_profiles SET display_name = ?, full_name = ?, gender = ?, birthday = ?, company_member_number = ?, member_type = ?, roster_member_number = ?, roster_verified_name = ?, roster_verified_at = CASE WHEN ? = 'general' THEN NULL ELSE CURRENT_TIMESTAMP END, line_url = ?, social_links_json = ?, profile_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    UPDATE member_profiles SET display_name = ?, full_name = ?, phone = ?, gender = ?, birthday = ?, company_member_number = ?, member_type = ?, roster_member_number = ?, roster_verified_name = ?, roster_verified_at = CASE WHEN ? = 'general' THEN NULL ELSE CURRENT_TIMESTAMP END, line_url = ?, social_links_json = ?, profile_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
     WHERE platform_user_id = ?
-  `).bind(displayName, fullName, gender, birthday, companyMemberNumber, memberType, rosterMemberNumber, rosterVerifiedName, memberType, lineUrl, JSON.stringify(socialLinks), userId).run();
+  `).bind(displayName, fullName, phone, gender, birthday, companyMemberNumber, memberType, rosterMemberNumber, rosterVerifiedName, memberType, lineUrl, JSON.stringify(socialLinks), userId).run();
   return getMember(db, userId);
 }
 

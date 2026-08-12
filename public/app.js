@@ -2797,6 +2797,7 @@ function profileFormMarkup(required = false) {
     <label>顯示名稱</label><input id="displayName" value="${esc(state.member.displayName || "")}" maxlength="120" required>
     <label>會員類型</label><select id="memberType" required><option value="">請選擇</option><option value="general" ${state.member.memberType === "general" ? "selected" : ""}>一般會員</option><option value="association" ${state.member.memberType === "association" ? "selected" : ""}>協會會員</option><option value="vendor" ${state.member.memberType === "vendor" ? "selected" : ""}>廠商會員</option></select>
     <label>姓名／公司名稱</label><input id="fullName" value="${esc(state.member.fullName || "")}" maxlength="120" autocomplete="name" required>
+    <label>行動電話</label><input id="phone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(state.member.phone || "")}" placeholder="0912345678" maxlength="20" ${state.member.phone ? "readonly" : ""} required>
     <div id="rosterMemberNumberField"><label>會員編號</label><input id="rosterMemberNumber" value="${esc(state.member.rosterMemberNumber || "")}" maxlength="80" autocomplete="off"><small>協會會員與廠商會員必填，系統會到 TDEA 正式名冊核對。</small></div>
     <label>生日密碼（民國年月日）</label><input id="birthday" type="text" inputmode="numeric" value="${esc(birthdayPassword(state.member.birthday))}" placeholder="例如 591021、390305" pattern="[0-9]{6,7}" maxlength="7" required>
     <label>性別</label><select id="gender" required><option value="">請選擇</option><option value="female" ${state.member.gender === "female" ? "selected" : ""}>女性</option><option value="male" ${state.member.gender === "male" ? "selected" : ""}>男性</option><option value="other" ${state.member.gender === "other" ? "selected" : ""}>其他</option><option value="prefer_not_to_say" ${state.member.gender === "prefer_not_to_say" ? "selected" : ""}>不透露</option></select>
@@ -2840,6 +2841,8 @@ function bindProfileForm(dialog, required = false) {
     const birthday = birthdayPassword(q("#birthday").value);
     if (!q("#displayName").value.trim()) return alert("請輸入顯示名稱");
     if (!q("#fullName").value.trim()) return alert("請輸入姓名／公司名稱");
+    const phone = q("#phone").value.replace(/[^\d+]/g, "");
+    if (!/^(?:\+886|0)9\d{8}$/.test(phone)) return alert("請輸入正確的台灣行動電話");
     if (!q("#memberType").value) return alert("請選擇會員類型");
     if (["association", "vendor"].includes(q("#memberType").value) && !q("#rosterMemberNumber").value.trim()) return alert("協會會員與廠商會員必須填寫會員編號");
     if (!/^\d{6,7}$/.test(birthday)) return alert("生日密碼請輸入民國年月日，例如 591021、390305");
@@ -2865,6 +2868,7 @@ function bindProfileForm(dialog, required = false) {
           body:JSON.stringify({
             displayName:q("#displayName").value,
             fullName:q("#fullName").value,
+            phone,
             memberType:q("#memberType").value,
             memberNumber:q("#rosterMemberNumber").value,
             gender:q("#gender").value,
