@@ -31,6 +31,7 @@ test("TDEA 活動與廣告贈點展示使用服務綁定並僅回傳展示欄位
   assert.ok(!app.includes('class="tdea-vendor-carousel"'));
   assert.ok(app.includes('class="tdea-activity-carousel"'));
   assert.ok(app.includes('aria-label="TDEA 活動報名"'));
+  assert.ok(!app.includes("tdea-activity-copy"));
   assert.ok(app.includes("詳細說明"));
   assert.ok(app.includes("點我報名"));
 });
