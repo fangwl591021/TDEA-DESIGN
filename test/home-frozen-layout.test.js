@@ -10,7 +10,7 @@ const homeStart = app.indexOf("async function home()");
 const homeEnd = app.indexOf("async function legacyHome()", homeStart);
 const home = app.slice(homeStart, homeEnd);
 
-test("home uses a compact member summary, shared task toggle, and social-first viewport", () => {
+test("home uses a compact member summary, shared task toggle, and default daily check-in", () => {
   assert.match(home, /class="ak-wordmark">TDEA/);
   assert.match(home, /class="ak-task-notice\$\{taskAlert\}" data-home-task-toggle aria-expanded="false" aria-controls="homeTaskDetail"/);
   assert.equal((home.match(/data-home-task-toggle/g) || []).length, 2);
@@ -20,15 +20,12 @@ test("home uses a compact member summary, shared task toggle, and social-first v
   assert.match(home, /class="ak-destiny-card" data-home-action="zodiacPopup"/);
   assert.match(home, /class="ak-qr-card" data-home-action="share"/);
   assert.match(home, /id="homeTaskDetail"[\s\S]*data-home-action="tasks">查看全部任務/);
-  assert.match(home, /class="ak-frozen-nav"[\s\S]*class="ak-feature-grid"[\s\S]*data-content-panel="academy"[\s\S]*class="ak-content-tabs"/);
-  assert.doesNotMatch(home, /class="ak-bottom-nav"/);
+  assert.match(home, /class="ak-frozen-nav"[\s\S]*class="ak-feature-grid"[\s\S]*id="homeDailyPanel" class="ak-daily-panel ak-content-panel"/);
+  assert.doesNotMatch(home, /class="ak-bottom-nav"|class="ak-content-tabs"|data-content-view=|data-content-panel=/);
   assert.match(css, /\.ak-home-task-detail\{max-height:232px/);
   assert.match(css, /\.ak-home-task-list\{max-height:172px;[^}]*overflow-y:auto/);
   assert.match(css, /\.ak-frozen-nav \.ak-feature-grid\{[^}]*grid-template-columns:repeat\(6/);
   assert.match(css, /\.ak-frozen-nav \.ak-feature-grid button\{[^}]*min-height:62px/);
-  assert.match(css, /\.ak-home-content>\.ak-content-tabs button\{[^}]*min-height:54px/);
-  assert.equal((home.match(/data-content-view="[^"]+"><svg/g) || []).length, 5);
-  assert.match(css, /\.ak-instagram-panel\{[^}]*overflow-y:auto/);
 });
 
 test("task notice handles zero, pending, overdue, and API failure without failing home", () => {

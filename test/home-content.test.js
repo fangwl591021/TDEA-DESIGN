@@ -2,28 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-test("home exposes daily check-in and the directly imported official site", () => {
+test("home shows daily check-in without the retired brand-content switcher", () => {
   const app = readFileSync(new URL("../public/app.js", import.meta.url), "utf8");
   const start = app.indexOf("async function home()");
   const end = app.indexOf("async function legacyHome()", start);
   const home = app.slice(start, end);
-  assert.match(home, /data-home-inline="daily" aria-pressed="false"/);
-  assert.match(home, /id="homeDailyPanel" class="ak-daily-panel ak-content-panel hidden" data-content-panel="daily"/);
+  assert.match(home, /data-home-inline="daily" aria-pressed="true"/);
+  assert.match(home, /id="homeDailyPanel" class="ak-daily-panel ak-content-panel" aria-label="每日簽到"/);
   assert.match(home, /await daily\("#homeDailyPanel"\)/);
-  assert.match(home, /class="ak-official-import ak-content-panel hidden"/);
-  assert.match(home, /class="ak-official-import-frame"/);
-  assert.match(home, /src="\/akaffit-official"/);
-  assert.match(home, /data-content-view="youtube"><svg[\s\S]*?<span>YouTube<\/span>/);
-  assert.match(home, /data-content-view="facebook"><svg[\s\S]*?<span>Facebook<\/span>/);
-  assert.match(home, /data-content-view="instagram"><svg[\s\S]*?<span>Instagram<\/span>/);
-  assert.match(home, /data-content-view="official"><svg[\s\S]*?<span>官方網站<\/span>/);
-  assert.match(home, /data-content-view="academy"><svg[\s\S]*?<span>咖啡學院<\/span>/);
-  assert.match(home, /data-content-panel="academy"[\s\S]*goldenJourneyMarkup\(\)/);
-  assert.match(app, /data-academy-course="golden-journey">醇金之旅/);
-  assert.match(home, /data-content-panel="facebook"/);
-  assert.match(home, /data-content-panel="instagram"/);
-  assert.match(home, /data-content-panel="youtube"/);
-  assert.match(home, /loadAkaffitYoutube\(\)/);
+  assert.match(home, /dailyButton\?\.addEventListener\("click", openHomeDaily\);[\s\S]*openHomeDaily\(\);/);
+  assert.doesNotMatch(home, /data-content-view=|data-content-panel=|class="ak-content-tabs"/);
+  assert.doesNotMatch(home, /ak-youtube-panel|ak-facebook-panel|ak-instagram-panel|ak-official-import|ak-academy-panel/);
   assert.doesNotMatch(home, /\/v1\/blog\/posts\?limit=6|A-KAFFIT JOURNAL|ak-brand-story|ak-craft-section/);
   assert.doesNotMatch(home, /聯絡我們|電話|信箱|地址|service@|mailto:|tel:/);
   assert.doesNotMatch(home, />更多功能</);

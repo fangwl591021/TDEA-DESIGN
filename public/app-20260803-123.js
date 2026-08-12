@@ -1331,40 +1331,19 @@ async function home() {
         <div class="ak-feature-grid">
           <button data-home-action="cardCollection">${homeToolIcons.cardCollection}<span>名片收藏</span></button>
           <button data-home-action="card">${homeToolIcons.card}<span>電子名片</span></button>
-          <button type="button" data-home-inline="daily" aria-pressed="false">${homeToolIcons.daily}<span>每日簽到</span></button>
+          <button type="button" data-home-inline="daily" aria-pressed="true">${homeToolIcons.daily}<span>每日簽到</span></button>
           <button data-home-action="smartMatch">${homeToolIcons.smartMatch}<span>智能配對</span></button>
           <button data-home-action="calendar">${homeToolIcons.calendar}<span>個人行程</span></button>
           <button data-home-action="tasks">${homeToolIcons.tasks}<span>AI 任務</span></button>
         </div>
 
       </div>
-      <section id="homeDailyPanel" class="ak-daily-panel ak-content-panel hidden" data-content-panel="daily" aria-label="每日簽到"></section>
-      <section class="ak-youtube-panel ak-content-panel hidden" data-content-panel="youtube" aria-label="A’kaffit YouTube 頻道"></section>
-      <section class="ak-facebook-panel ak-content-panel" data-content-panel="facebook" aria-label="TDEA Facebook 粉絲專頁"><iframe class="ak-facebook-frame" title="TDEA Facebook 粉絲專頁" src="https://www.facebook.com/plugins/page.php?href=https%3A%2F%2Fwww.facebook.com%2FTDEA2020&amp;tabs=timeline&amp;width=500&amp;height=900&amp;small_header=true&amp;adapt_container_width=true&amp;hide_cover=false&amp;show_facepile=false" loading="lazy" scrolling="yes" frameborder="0" allowfullscreen="true" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"></iframe></section>
-      <section class="ak-instagram-panel ak-content-panel hidden" data-content-panel="instagram" aria-label="A’kaffit Instagram"><iframe class="ak-instagram-frame" title="A’kaffit Instagram" src="https://www.instagram.com/akaffit/embed/" loading="lazy" scrolling="yes" frameborder="0" allowtransparency="true"></iframe><div class="ak-instagram-more"><p>Instagram 官方預覽顯示近期貼文</p><a href="https://www.instagram.com/akaffit/" target="_blank" rel="noopener noreferrer">查看更多 Instagram 貼文 ↗</a></div></section>
-      <section class="ak-official-import ak-content-panel hidden" data-content-panel="official" aria-label="A’kaffit 官方網站"><div class="ak-official-import-loading">A’kaffit 官網載入中…</div><iframe class="ak-official-import-frame" title="A’kaffit 官方網站" src="/akaffit-official" loading="lazy"></iframe></section>
-      <section class="ak-academy-panel ak-content-panel hidden" data-content-panel="academy" aria-label="咖啡學院">${goldenJourneyMarkup()}</section>
-      <div class="ak-content-tabs" role="tablist" aria-label="品牌內容切換">
-        <button type="button" role="tab" aria-selected="false" data-content-view="youtube"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="3"/><path d="m10 9 5 3-5 3z"/></svg><span>YouTube</span></button>
-        <button type="button" role="tab" aria-selected="true" class="active" data-content-view="facebook"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14.5 21v-8h2.8l.5-3h-3.3V8.1c0-.9.3-1.6 1.7-1.6H18V3.8c-.6-.1-1.4-.2-2.5-.2-2.5 0-4.2 1.5-4.2 4.3V10H8.5v3h2.8v8z"/></svg><span>Facebook</span></button>
-        <button type="button" role="tab" aria-selected="false" data-content-view="instagram"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.8" r=".8"/></svg><span>Instagram</span></button>
-        <button type="button" role="tab" aria-selected="false" data-content-view="official"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.4 2.5 3.6 5.5 3.6 9S14.4 18.5 12 21c-2.4-2.5-3.6-5.5-3.6-9S9.6 5.5 12 3"/></svg><span>官方網站</span></button>
-        <button type="button" role="tab" aria-selected="false" data-content-view="academy"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8h12v7a5 5 0 0 1-5 5h-2a5 5 0 0 1-5-5zM17 10h1.5a2.5 2.5 0 0 1 0 5H17M7 4c0 1 1 1 1 2M11 4c0 1 1 1 1 2M15 4c0 1 1 1 1 2"/></svg><span>咖啡學院</span></button>
-      </div>
-    </section>
+      <section id="homeDailyPanel" class="ak-daily-panel ak-content-panel" aria-label="每日簽到"></section>
   </section><section id="sharePanel" class="ak-share-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="sharePanelTitle"><div class="ak-share-backdrop" data-close-share></div><article class="ak-share-card"><button type="button" class="ak-share-close" data-close-share aria-label="關閉專屬分享">×</button><h3 id="sharePanelTitle">專屬分享</h3><p class="muted">朋友掃描或開啟網址後，會帶入你的系統推薦關係。</p><div id="shareQr" class="qr"></div><p id="shareInviteUrl" class="share-invite-url" aria-label="推薦網址"></p><button class="btn alt" id="copyInvite">分享給 LINE 好友</button></article></section>`);
   bindHomeTaskToggle();
-  initGoldenJourney();
-  $(".ak-official-import-frame")?.addEventListener("load", () => $(".ak-official-import-loading")?.remove(), { once:true });
-  let youtubeLoaded = false;
   const dailyButton = document.querySelector('[data-home-inline="daily"]');
   const dailyPanel = $("#homeDailyPanel");
   const openHomeDaily = async () => {
-    document.querySelectorAll("[data-content-view]").forEach((tab) => {
-      tab.classList.remove("active");
-      tab.setAttribute("aria-selected", "false");
-    });
-    document.querySelectorAll("[data-content-panel]").forEach((panel) => panel.classList.toggle("hidden", panel !== dailyPanel));
     dailyButton?.setAttribute("aria-pressed", "true");
     if (!dailyPanel) return;
     dailyPanel.innerHTML = '<div class="ak-inline-loading">簽到內容載入中…</div>';
@@ -1376,20 +1355,8 @@ async function home() {
     }
   };
   dailyButton?.addEventListener("click", openHomeDaily);
-  document.querySelectorAll("[data-content-view]").forEach((button) => button.addEventListener("click", () => {
-    const view = button.dataset.contentView;
-    dailyButton?.setAttribute("aria-pressed", "false");
-    document.querySelectorAll("[data-content-view]").forEach((tab) => {
-      const active = tab === button;
-      tab.classList.toggle("active", active);
-      tab.setAttribute("aria-selected", String(active));
-    });
-    document.querySelectorAll("[data-content-panel]").forEach((panel) => panel.classList.toggle("hidden", panel.dataset.contentPanel !== view));
-    if (view === "youtube" && !youtubeLoaded) {
-      youtubeLoaded = true;
-      loadAkaffitYoutube();
-    }
-  }));
+  openHomeDaily();
+
 }
 async function legacyHome() {
   const wallet = await api("/v1/points/wallet");
