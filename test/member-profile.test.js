@@ -18,6 +18,12 @@ test("member registration UI includes logo, name, numeric birthday, and repeatab
   assert.match(app, /id="memberLogoFile"/);
   assert.match(app, /id="displayName"/);
   assert.match(app, /id="fullName"/);
+  assert.match(app, /id="memberType" required/);
+  assert.match(app, />一般會員</);
+  assert.match(app, />協會會員</);
+  assert.match(app, />廠商會員</);
+  assert.match(app, /id="rosterMemberNumber"/);
+  assert.match(app, /TDEA 正式名冊核對/);
   assert.match(app, /id="birthday" type="text" inputmode="numeric"/);
   assert.match(app, /生日密碼（民國年月日）/);
   assert.match(app, /591021、390305/);

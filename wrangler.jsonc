@@ -29,6 +29,10 @@
     {
       "binding": "MLM_WORKER",
       "service": "mlm"
+    },
+    {
+      "binding": "TDEA_WORKER",
+      "service": "tdeawork"
     }
   ],
   "r2_buckets": [

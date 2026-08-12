@@ -34,6 +34,10 @@ test('entry page clearly separates member login from new registration',()=>{
   assert.match(app,/intent:phoneAuthMode/);
   assert.match(css,/\.ak-auth-tabs/);
   assert.match(worker,/\['login','register'\]\.includes\(body\.intent\)/);
+  const repository=readFileSync(new URL('../src/member-repository.js',import.meta.url),'utf8');
+  assert.match(repository,/member_number, company_member_number, member_type/);
+  assert.match(repository,/VALUES \(\?, \?, \?, 'prefer_not_to_say', \?, \?, '', ''\)/);
+  assert.doesNotMatch(repository,/company_member_number, profile_completed_at/);
 });
 test('LIFF entry automatically resumes LINE Login after session recovery',()=>{
   const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');

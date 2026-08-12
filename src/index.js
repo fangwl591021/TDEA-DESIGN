@@ -21,6 +21,7 @@ import {
   updateMemberProfile,
 } from "./member-repository.js";
 import { adjustPoints, awardPoints, getWallet } from "./points.js";
+import { verifyTdeaRosterMember } from "./tdea-roster.js";
 import {
   cancelCalendarSession,
   checkInToSession,
@@ -966,12 +967,7 @@ async function app(request, env, ctx) {
           eventReference: result.member.userId,
           idempotencyKey: `member_joined:${result.member.userId}`,
         });
-        await awardPoints(env.DB, {
-          userId: result.member.userId,
-          eventType: "registration_completed",
-          eventReference: result.member.userId,
-          idempotencyKey: `registration_completed:${result.member.userId}`,
-        });
+
       }
       if (result.referralCreated && result.member.systemReferrer?.userId) {
         await awardPoints(env.DB, {
@@ -1621,10 +1617,13 @@ async function app(request, env, ctx) {
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
     try {
       const wasCompleted = Boolean(member.profileCompletedAt);
+      const profile = (await readJson(request)) || {};
+      const rosterVerification = await verifyTdeaRosterMember(env.TDEA_WORKER, profile);
       const updated = await updateMemberProfile(
         env.DB,
         member.userId,
-        (await readJson(request)) || {},
+        profile,
+        rosterVerification,
       );
       await queueMemberCrmInsight(env.DB,member.userId);
       scheduleMemberCrmInsights(env,ctx,member.userId);

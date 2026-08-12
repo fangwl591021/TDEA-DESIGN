@@ -81,6 +81,9 @@ function profileFromRow(row) {
     birthday: row.birthday || '',
     memberNumber: row.member_number || '',
     companyMemberNumber: row.company_member_number || '',
+    memberType: row.member_type ?? 'general',
+    rosterMemberNumber: row.roster_member_number || '',
+    rosterVerifiedAt: row.roster_verified_at || '',
     lineUrl: row.line_url || '',
     socialLinks,
     profileCompletedAt: row.profile_completed_at || '',
@@ -94,7 +97,7 @@ function profileFromRow(row) {
 }
 
 const memberFields = `
-  mp.display_name, mp.full_name, mp.picture_url, mp.phone, mp.email, mp.gender, mp.birthday, mp.member_number, mp.company_member_number, mp.line_url, mp.social_links_json, mp.profile_completed_at,
+  mp.display_name, mp.full_name, mp.picture_url, mp.phone, mp.email, mp.gender, mp.birthday, mp.member_number, mp.company_member_number, mp.member_type, mp.roster_member_number, mp.roster_verified_at, mp.line_url, mp.social_links_json, mp.profile_completed_at,
   rr.referrer_user_id, ref_mp.display_name AS referrer_name, ref_mp.member_number AS referrer_member_number
 `;
 
@@ -142,8 +145,8 @@ export async function resolveLineMember(db, lineProfile, inviteToken = '') {
     db.prepare('INSERT INTO platform_users (id) VALUES (?)').bind(userId),
     db.prepare('INSERT INTO external_identities (id, platform_user_id, provider, provider_subject) VALUES (?, ?, ?, ?)')
       .bind(identityId, userId, 'line_login', lineProfile.sub),
-    db.prepare('INSERT INTO member_profiles (platform_user_id, display_name, picture_url, email, member_number) VALUES (?, ?, ?, ?, ?)')
-      .bind(userId, displayName, pictureUrl, email, memberNumber),
+    db.prepare('INSERT INTO member_profiles (platform_user_id, display_name, picture_url, email, member_number, member_type) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(userId, displayName, pictureUrl, email, memberNumber, ''),
     db.prepare('INSERT INTO audit_logs (id, subject_user_id, action, metadata_json) VALUES (?, ?, ?, ?)')
       .bind(newId('audit'), userId, 'member.registered', JSON.stringify({ provider: 'line_login' }))
   ];
@@ -155,7 +158,7 @@ export async function resolveLineMember(db, lineProfile, inviteToken = '') {
       .bind(newId('audit'), userId, 'referral.confirmed', JSON.stringify({ inviteLinkId: referral.inviteLinkId }))
   );
   await db.batch(statements);
-  return { member: { userId, displayName, fullName: '', pictureUrl, phone: '', email, gender: '', birthday: '', memberNumber, companyMemberNumber: '', lineUrl: '', socialLinks: [], profileCompletedAt: '', systemReferrer: referral ? { userId: referral.inviterUserId, displayName: '', memberNumber: '' } : null, status: 'active' }, created: true, referralCreated: Boolean(referral) };
+  return { member: { userId, displayName, fullName: '', pictureUrl, phone: '', email, gender: '', birthday: '', memberNumber, companyMemberNumber: '', memberType: '', rosterMemberNumber: '', rosterVerifiedAt: '', lineUrl: '', socialLinks: [], profileCompletedAt: '', systemReferrer: referral ? { userId: referral.inviterUserId, displayName: '', memberNumber: '' } : null, status: 'active' }, created: true, referralCreated: Boolean(referral) };
 }
 
 export function normalizeBirthday(rawBirthday) {
@@ -241,9 +244,9 @@ export async function resolvePhoneBirthdayMember(db, rawPhone, rawBirthday, invi
     db.prepare('INSERT INTO external_identities (id, platform_user_id, provider, provider_subject) VALUES (?, ?, ?, ?)')
       .bind(newId('identity'), userId, 'phone_birthday', subject),
     db.prepare(`INSERT INTO member_profiles
-      (platform_user_id, display_name, phone, gender, birthday, member_number, company_member_number, profile_completed_at)
-      VALUES (?, ?, ?, 'prefer_not_to_say', ?, ?, ?, CURRENT_TIMESTAMP)`)
-      .bind(userId, displayName, normalizedPhone, birthday, memberNumber, memberNumber),
+      (platform_user_id, display_name, phone, gender, birthday, member_number, company_member_number, member_type)
+      VALUES (?, ?, ?, 'prefer_not_to_say', ?, ?, '', '')`)
+      .bind(userId, displayName, normalizedPhone, birthday, memberNumber),
     db.prepare('INSERT INTO audit_logs (id, subject_user_id, action, metadata_json) VALUES (?, ?, ?, ?)')
       .bind(newId('audit'), userId, 'member.registered', JSON.stringify({ provider: 'phone_birthday' }))
   ];
@@ -292,12 +295,15 @@ export async function getMember(db, userId) {
   return profileFromRow(row);
 }
 
-export async function updateMemberProfile(db, userId, profile) {
+export async function updateMemberProfile(db, userId, profile, rosterVerification) {
   const displayName = String(profile.displayName || '').trim().slice(0, 120);
   const fullName = String(profile.fullName || '').trim().slice(0, 120);
   const gender = String(profile.gender || '').trim();
   const birthday = normalizeBirthday(profile.birthday);
   const companyMemberNumber = String(profile.companyMemberNumber || '').trim().slice(0, 80);
+  const memberType = String(rosterVerification?.memberType || '').trim();
+  const rosterMemberNumber = String(rosterVerification?.memberNumber || '').trim().slice(0, 80);
+  const rosterVerifiedName = String(rosterVerification?.rosterName || '').trim().slice(0, 120);
   const lineUrl = String(profile.lineUrl || '').trim().slice(0, 500);
   const socialLinks = Array.isArray(profile.socialLinks) ? profile.socialLinks.slice(0, 10).map((item) => ({
     label: String(item?.label || '').trim().slice(0, 40),
@@ -306,6 +312,8 @@ export async function updateMemberProfile(db, userId, profile) {
   if (!displayName) throw new Error('請輸入顯示名稱');
   if (!fullName) throw new Error('請輸入姓名');
   if (!['female', 'male', 'other', 'prefer_not_to_say'].includes(gender)) throw new Error('請選擇性別');
+  if (!['general', 'association', 'vendor'].includes(memberType)) throw new Error('會員類型尚未完成核對');
+  if (memberType !== 'general' && !rosterMemberNumber) throw new Error('協會會員與廠商會員必須完成會員編號核對');
   if (lineUrl && !/^https:\/\/(lin\.ee|line\.me|liff\.line\.me)\//i.test(lineUrl)) {
     throw new Error('LINE 網址格式錯誤，請填 https://lin.ee/... 或 https://line.me/...');
   }
@@ -316,9 +324,9 @@ export async function updateMemberProfile(db, userId, profile) {
     if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error(`「${item.label}」的社群網址必須以 http:// 或 https:// 開頭`);
   }
   await db.prepare(`
-    UPDATE member_profiles SET display_name = ?, full_name = ?, gender = ?, birthday = ?, company_member_number = ?, line_url = ?, social_links_json = ?, profile_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    UPDATE member_profiles SET display_name = ?, full_name = ?, gender = ?, birthday = ?, company_member_number = ?, member_type = ?, roster_member_number = ?, roster_verified_name = ?, roster_verified_at = CASE WHEN ? = 'general' THEN NULL ELSE CURRENT_TIMESTAMP END, line_url = ?, social_links_json = ?, profile_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
     WHERE platform_user_id = ?
-  `).bind(displayName, fullName, gender, birthday, companyMemberNumber, lineUrl, JSON.stringify(socialLinks), userId).run();
+  `).bind(displayName, fullName, gender, birthday, companyMemberNumber, memberType, rosterMemberNumber, rosterVerifiedName, memberType, lineUrl, JSON.stringify(socialLinks), userId).run();
   return getMember(db, userId);
 }
 
