@@ -70,3 +70,27 @@ test("lookup configuration and mother-worker errors fail closed", async () => {
     memberType: "association", memberNumber: "", fullName: "王小明",
   }), /必須填寫會員編號/);
 });
+
+test("expired association and vendor qualifications fail closed and never become bound", async () => {
+  for (const memberType of ["association", "vendor"]) {
+    await assert.rejects(() => verifyTdeaRosterMember(
+      service({}, 409, "此會員目前不是有效會員資格，請聯絡協會確認"),
+      "secret",
+      { memberType, memberNumber: memberType === "association" ? "A1090001" : "V0001", fullName: memberType === "association" ? "王小明" : "設計有限公司" },
+    ), /不是有效會員資格/);
+  }
+});
+
+test("re-verification preserves the authoritative source returned by the lookup service", async () => {
+  const cases = [
+    ["general", "", "王小明", "mother-register"],
+    ["association", "A1090001", "王小明", "association-crm"],
+    ["vendor", "V0001", "設計有限公司", "vendor-crm"],
+  ];
+  for (const [memberType, memberNumber, fullName, source] of cases) {
+    const result = await verifyTdeaRosterMember(service({ memberType, memberNumber, rosterName: fullName, source }), "secret", {
+      memberType, memberNumber, fullName, phone: "0912345678", birthday: "591021",
+    });
+    assert.equal(result.source, source);
+  }
+});
