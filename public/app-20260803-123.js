@@ -80,7 +80,7 @@ const state = {
   courseView: "catalog",
   cardVersion: "",
   daily: null,
-  dailyPanel: "checkin",
+  dailyPanel: "ads",
   dailyCampaignId: new URLSearchParams(location.search).get("checkin") || "",
   calendarSessions: null,
   calendarRegisteredIds: new Set(),
@@ -1527,6 +1527,59 @@ async function directDailyCheckin(button = null) {
   } catch (error) { alert(error.message || '每日簽到失敗'); }
 }
 
+function tdeaActivityStatus(row = {}) {
+  if (row.status === 'cancelled') return '已取消';
+  if (row.checkedInAt) return '已核銷';
+  return '已報名';
+}
+function tdeaActivityRecordMarkup(rows = []) {
+  if (!rows.length) return '<div class="card muted">目前沒有活動紀錄。</div>';
+  return `<section class="course-records">${rows.map((row) => {
+    const activity = row.activity || {};
+    const title = activity.name || row.formId || '活動報名';
+    const checkinUrl = row.checkinUrl || (row.checkinToken ? `https://liff.line.me/2005868456-cfANNVou?checkin=${encodeURIComponent(row.checkinToken)}` : '');
+    const canCancel = row.status !== 'cancelled' && !row.checkedInAt;
+    return `<article class="course-record-card tdea-native-record" data-native-record="${esc(row.id || '')}">
+      <div class="course-record-top"><div><small>活動紀錄</small><h3>${esc(title)}</h3></div><span class="course-status">${esc(tdeaActivityStatus(row))}</span></div>
+      <div class="course-record-details">
+        ${activity.courseTime ? `<div><span>活動時間</span><b>${esc(activity.courseTime)}</b></div>` : ''}
+        ${row.submittedAt ? `<div><span>報名時間</span><b>${esc(new Date(row.submittedAt).toLocaleString('zh-TW',{hour12:false}))}</b></div>` : ''}
+        ${row.checkedInAt ? `<div><span>核銷時間</span><b>${esc(new Date(row.checkedInAt).toLocaleString('zh-TW',{hour12:false}))}</b></div>` : ''}
+      </div>
+      ${checkinUrl && !row.checkedInAt ? `<div class="tdea-record-qr" data-qr-url="${esc(checkinUrl)}"></div><small class="muted">活動核銷 QR</small>` : ''}
+      ${canCancel ? `<button type="button" class="btn alt" data-cancel-native-record="${esc(row.id || '')}" data-query-code="${esc(row.queryCode || '')}">取消報名</button>` : ''}
+    </article>`;
+  }).join('')}</section>`;
+}
+async function showTdeaActivityRecords(targetSelector = '') {
+  const target = targetSelector ? document.querySelector(targetSelector) : document.querySelector('[data-daily-records-area]');
+  if (target) target.innerHTML = '<div class="card muted">活動紀錄讀取中…</div>';
+  try {
+    const result = await api('/v1/tdea-activity-records');
+    const rows = Array.isArray(result.data) ? result.data : [];
+    const host = targetSelector ? document.querySelector(targetSelector) : document.querySelector('[data-daily-records-area]');
+    if (!host) return;
+    host.innerHTML = tdeaActivityRecordMarkup(rows);
+    host.querySelectorAll('[data-qr-url]').forEach((node) => {
+      const value = node.dataset.qrUrl || '';
+      if (!value || !window.QRCode) return;
+      new QRCode(node, { text:value, width:180, height:180 });
+    });
+    host.querySelectorAll('[data-cancel-native-record]').forEach((button) => button.onclick = async () => {
+      if (!confirm('確定取消這筆活動報名？')) return;
+      try {
+        await withActionFeedback(button, () => api('/v1/tdea-activity-records/cancel', {
+          method:'POST', body:JSON.stringify({ registrationId:button.dataset.cancelNativeRecord, queryCode:button.dataset.queryCode })
+        }), { busy:'取消中…', success:'已取消' });
+        await showTdeaActivityRecords(targetSelector);
+      } catch (error) { alert(error.message || '取消報名失敗'); }
+    });
+  } catch (error) {
+    const host = targetSelector ? document.querySelector(targetSelector) : document.querySelector('[data-daily-records-area]');
+    if (host) host.innerHTML = `<div class="card muted">${esc(error.message || '活動紀錄讀取失敗')}</div>`;
+  }
+}
+
 async function daily(targetSelector = "") {
   if (dailyRotationTimer) {
     clearInterval(dailyRotationTimer);
@@ -1543,7 +1596,7 @@ async function daily(targetSelector = "") {
     target.innerHTML = markup;
     return true;
   };
-  const panelTabs = `<div class="daily-top-tabs daily-panel-tabs" role="tablist" aria-label="TDEA 服務"><button type="button" class="daily-top-tab ${state.dailyPanel === "checkin" ? "active" : ""}" data-daily-panel="checkin">每日簽到</button><button type="button" class="daily-top-tab ${state.dailyPanel === "activities" ? "active" : ""}" data-daily-panel="activities">活動報名</button><button type="button" class="daily-top-tab ${state.dailyPanel === "ads" ? "active" : ""}" data-daily-panel="ads">廣告贈點</button><button type="button" class="daily-top-tab" data-activity-records>活動紀錄</button></div>`;
+  const panelTabs = `<div class="daily-top-tabs daily-panel-tabs" role="tablist" aria-label="TDEA 服務"><button type="button" class="daily-top-tab" data-direct-daily-checkin>每日簽到</button><button type="button" class="daily-top-tab ${state.dailyPanel === "activities" ? "active" : ""}" data-daily-panel="activities">活動報名</button><button type="button" class="daily-top-tab ${state.dailyPanel === "ads" ? "active" : ""}" data-daily-panel="ads">廣告贈點</button><button type="button" class="daily-top-tab ${state.dailyPanel === "records" ? "active" : ""}" data-activity-records>活動紀錄</button></div>`;
   const renderTabs = (campaigns = []) => campaigns.length ? `<div class="daily-top-tabs daily-campaign-tabs" role="tablist" aria-label="簽到活動">${campaigns.map((campaign) => `<button type="button" class="daily-top-tab ${state.dailyCampaignId === campaign.id ? "active" : ""}" data-daily-campaign="${esc(campaign.id)}">${esc(campaign.name || "簽到活動")}</button>`).join("")}</div>` : "";
   const bindTabs = () => {
     getDailyRoot()?.querySelectorAll("[data-daily-panel]").forEach((button) => { button.onclick = async () => {
@@ -1552,22 +1605,17 @@ async function daily(targetSelector = "") {
       state.dailyPanel = panel;
       daily(targetSelector);
     }; });
-    getDailyRoot()?.querySelector("[data-activity-records]")?.addEventListener("click", async () => {
-      try {
-        await initLiffOnce();
-        const profile = liff.isLoggedIn() ? await liff.getProfile().catch(() => null) : null;
-        const uid = String(profile?.userId || '').trim();
-        if (!uid) throw new Error('missing_line_uid');
-        const url = new URL('https://tdeawork.fangwl591021.workers.dev/');
-        url.searchParams.set('query', '1');
-        url.searchParams.set('lineUserId', uid);
-        location.href = url.toString();
-      } catch {
-        alert('目前會員身分無法讀取，請重新開啟會員中心後再試。');
-      }
-    });
+    getDailyRoot()?.querySelector("[data-direct-daily-checkin]")?.addEventListener("click", (event) => directDailyCheckin(event.currentTarget));
+    getDailyRoot()?.querySelector("[data-activity-records]")?.addEventListener("click", () => { state.dailyPanel = "records"; daily(targetSelector); });
     getDailyRoot()?.querySelectorAll("[data-daily-campaign]").forEach((button) => { button.onclick = () => { state.dailyPanel = "checkin"; state.dailyCampaignId = button.dataset.dailyCampaign; daily(targetSelector); }; });
   };
+  if (state.dailyPanel === "checkin") state.dailyPanel = "ads";
+  if (state.dailyPanel === "records") {
+    if (!renderDaily(`${panelTabs}<div data-daily-records-area><div class="card muted">活動紀錄讀取中…</div></div>`)) return;
+    bindTabs();
+    await showTdeaActivityRecords(targetSelector ? `${targetSelector} [data-daily-records-area]` : '[data-daily-records-area]');
+    return;
+  }
   if (state.dailyPanel !== "checkin") {
     try {
       const showcase = await api("/v1/tdea-showcase");

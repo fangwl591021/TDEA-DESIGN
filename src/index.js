@@ -1691,6 +1691,55 @@ async function app(request, env, ctx) {
     }
   }
 
+  if (request.method === "GET" && url.pathname === "/v1/tdea-activity-records") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    if (!env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== "function") return json({ success: false, error: "TDEA activity service unavailable" }, 503);
+    const identity = await env.DB.prepare(`
+      SELECT provider_subject AS line_user_id
+      FROM external_identities
+      WHERE platform_user_id = ? AND provider = 'line_login' AND verification_status = 'verified'
+      ORDER BY last_verified_at DESC, created_at DESC
+      LIMIT 1
+    `).bind(member.userId).first();
+    const lineUserId = String(identity?.line_user_id || '').trim();
+    if (!lineUserId) return json({ success: false, error: "目前會員尚未綁定 LINE 身分" }, 409);
+    const upstream = await env.TDEA_WORKER.fetch(`https://tdeawork.internal/api/native-registrations/me?lineUserId=${encodeURIComponent(lineUserId)}`, { headers: { accept: 'application/json' } });
+    const payload = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || payload.success !== true) return json({ success: false, error: payload.message || payload.error || "活動紀錄讀取失敗" }, upstream.status || 502);
+    return json({ success: true, data: Array.isArray(payload.data) ? payload.data : [] });
+  }
+
+  if (request.method === "POST" && url.pathname === "/v1/tdea-activity-records/cancel") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    if (!env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== "function") return json({ success: false, error: "TDEA activity service unavailable" }, 503);
+    const identity = await env.DB.prepare(`
+      SELECT provider_subject AS line_user_id
+      FROM external_identities
+      WHERE platform_user_id = ? AND provider = 'line_login' AND verification_status = 'verified'
+      ORDER BY last_verified_at DESC, created_at DESC
+      LIMIT 1
+    `).bind(member.userId).first();
+    const lineUserId = String(identity?.line_user_id || '').trim();
+    if (!lineUserId) return json({ success: false, error: "目前會員尚未綁定 LINE 身分" }, 409);
+    const body = (await readJson(request)) || {};
+    const registrationId = String(body.registrationId || '').trim();
+    const queryCode = String(body.queryCode || '').trim();
+    if (!registrationId || !queryCode) return badRequest("缺少活動紀錄識別資料");
+    const listResponse = await env.TDEA_WORKER.fetch(`https://tdeawork.internal/api/native-registrations/me?lineUserId=${encodeURIComponent(lineUserId)}`, { headers: { accept: 'application/json' } });
+    const listPayload = await listResponse.json().catch(() => ({}));
+    const owned = Array.isArray(listPayload.data) && listPayload.data.some((row) => String(row?.id || '') === registrationId && String(row?.queryCode || '') === queryCode);
+    if (!listResponse.ok || listPayload.success !== true || !owned) return json({ success: false, error: "找不到可取消的本人活動紀錄" }, 404);
+    const upstream = await env.TDEA_WORKER.fetch('https://tdeawork.internal/api/native-registrations/cancel', {
+      method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' },
+      body: JSON.stringify({ registrationId, queryCode })
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || payload.success !== true) return json({ success: false, error: payload.message || payload.error || "取消報名失敗" }, upstream.status || 502);
+    return json({ success: true, data: payload.data || null });
+  }
+
   if (request.method === "GET" && url.pathname === "/v1/points/wallet") {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
