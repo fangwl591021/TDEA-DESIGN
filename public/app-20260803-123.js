@@ -1544,7 +1544,19 @@ async function daily(targetSelector = "") {
   const renderTabs = (campaigns = []) => campaigns.length ? `<div class="daily-top-tabs daily-campaign-tabs" role="tablist" aria-label="簽到活動">${campaigns.map((campaign) => `<button type="button" class="daily-top-tab ${state.dailyCampaignId === campaign.id ? "active" : ""}" data-daily-campaign="${esc(campaign.id)}">${esc(campaign.name || "簽到活動")}</button>`).join("")}</div>` : "";
   const bindTabs = () => {
     getDailyRoot()?.querySelectorAll("[data-daily-panel]").forEach((button) => { button.onclick = () => { state.dailyPanel = button.dataset.dailyPanel || "checkin"; daily(targetSelector); }; });
-    getDailyRoot()?.querySelector("[data-activity-records]")?.addEventListener("click", () => { location.href = "https://liff.line.me/2005868456-cfANNVou?query=1"; });
+    getDailyRoot()?.querySelector("[data-activity-records]")?.addEventListener("click", async () => {
+      try {
+        await initLiffOnce();
+        const profile = liff.isLoggedIn() ? await liff.getProfile().catch(() => null) : null;
+        const uid = String(profile?.userId || '').trim();
+        const url = new URL('https://liff.line.me/2005868456-cfANNVou');
+        url.searchParams.set('query', '1');
+        if (uid) url.searchParams.set('lineUserId', uid);
+        location.href = url.toString();
+      } catch {
+        location.href = 'https://liff.line.me/2005868456-cfANNVou?query=1';
+      }
+    });
     getDailyRoot()?.querySelectorAll("[data-daily-campaign]").forEach((button) => { button.onclick = () => { state.dailyPanel = "checkin"; state.dailyCampaignId = button.dataset.dailyCampaign; daily(targetSelector); }; });
   };
   if (state.dailyPanel !== "checkin") {
