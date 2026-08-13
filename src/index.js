@@ -64,6 +64,7 @@ import {
   confirmImport,
   createContactShare,
   createImport,
+  deleteContact,
   expandContactContent,
   INDUSTRY_OPTIONS,
   listContacts,
