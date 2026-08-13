@@ -1300,6 +1300,13 @@ function bindHomeTaskToggle() {
   toggles.forEach((button) => button.addEventListener("click", () => setExpanded(!panel.classList.contains("is-expanded"))));
 }
 
+async function refreshVisibleTdeaPointBalance() {
+  const snapshot = await api('/v1/points/wallet');
+  const balance = Number(snapshot?.wallet?.balance || 0);
+  document.querySelectorAll('.ak-point-card strong').forEach((node) => { node.textContent = format(balance); });
+  return balance;
+}
+
 async function home() {
   const result = await Promise.allSettled([api("/v1/points/wallet"), api("/v1/tasks")]);
   const wallet = result[0].status === "fulfilled" ? result[0].value.wallet : { balance:0 };
@@ -1522,6 +1529,7 @@ async function directDailyCheckin(button = null) {
     const result = await withActionFeedback(button, () => api('/v1/daily-ad/check-in', {
       method:'POST', body:JSON.stringify({ campaignId })
     }), { busy:'簽到中…', success:'簽到完成' });
+    await refreshVisibleTdeaPointBalance().catch(() => null);
     const pointText = result.pointResult?.awarded ? '，點數已入帳' : result.pointResult?.duplicate ? '，點數已確認' : '';
     alert(result.duplicate ? `今天已簽到${pointText}` : `簽到成功${pointText}`);
   } catch (error) { alert(error.message || '每日簽到失敗'); }
@@ -1710,6 +1718,7 @@ async function daily(targetSelector = "") {
     const button = checkinButton;
     try {
       const x = await withActionFeedback(button, () => api("/v1/daily-ad/check-in", { method: "POST", body: JSON.stringify({ campaignId: r.campaign.id }) }), {busy:"簽到處理中…",success:"簽到完成"});
+      await refreshVisibleTdeaPointBalance().catch(() => null);
       const pointText = x.pointResult?.awarded ? "，點數已入帳" : x.pointResult?.duplicate ? "，點數已確認入帳" : x.pointResult?.reason === "no_active_rule" ? "，但後台尚未啟用「每日簽到」點數規則" : "";
       alert(x.duplicate ? `今天已簽到${pointText}` : `簽到成功${pointText || "，點數已依規則處理"}`);
       daily(targetSelector);
