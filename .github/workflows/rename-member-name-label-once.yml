@@ -1,0 +1,38 @@
+name: Rename member name label once
+on:
+  push:
+    paths:
+      - '.github/workflows/rename-member-name-label-once.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Replace label
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('public/app-20260803-123.js')
+          s=p.read_text(encoding='utf-8')
+          old='姓名 / 公司名稱'
+          if old not in s:
+              raise SystemExit('label not found')
+          s=s.replace(old,'姓名')
+          p.write_text(s,encoding='utf-8')
+          PY
+      - name: Verify
+        run: |
+          node --check public/app-20260803-123.js
+          ! grep -q '姓名 / 公司名稱' public/app-20260803-123.js
+      - name: Commit and cleanup
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/app-20260803-123.js
+          git commit -m 'Rename member name field label'
+          git push origin HEAD:agent/full-project-transplant
