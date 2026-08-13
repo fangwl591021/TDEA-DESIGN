@@ -139,7 +139,7 @@ function needsBackfill(meta) {
 }
 
 export async function queueContactAiCardCrm(db, userId, id, force = false) {
-  const row=await db.prepare("SELECT * FROM contact_cards WHERE id=? AND scanner_user_id=? AND status='active' AND COALESCE(source_event_id,'')!=''").bind(id,userId).first();
+  const row=await db.prepare(`SELECT cc.* FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND COALESCE(cc.source_event_id,'')!='' AND cie.status IN ('created','updated') AND cc.display_name NOT IN ('名片 AI 分析中','名片辨識未完成','名片分析未完成')`).bind(id,userId).first();
   if(!row)return false;
   const current=aiCardCrmFromVersions(row.versions_json);
   if(!force && (!needsBackfill(current) || ["queued","processing"].includes(current.status)))return false;
@@ -148,7 +148,7 @@ export async function queueContactAiCardCrm(db, userId, id, force = false) {
 }
 
 export async function processContactAiCardCrm(db, userId, id, provider, model) {
-  const row=await db.prepare("SELECT * FROM contact_cards WHERE id=? AND scanner_user_id=? AND status='active' AND COALESCE(source_event_id,'')!=''").bind(id,userId).first();
+  const row=await db.prepare(`SELECT cc.* FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND COALESCE(cc.source_event_id,'')!='' AND cie.status IN ('created','updated') AND cc.display_name NOT IN ('名片 AI 分析中','名片辨識未完成','名片分析未完成')`).bind(id,userId).first();
   if(!row)return null;
   const current=aiCardCrmFromVersions(row.versions_json);
   await writeMeta(db,row,{...current,status:"processing",error:"",updatedAt:new Date().toISOString()});
@@ -165,7 +165,7 @@ export async function processContactAiCardCrm(db, userId, id, provider, model) {
 
 async function queueBackfillRows(db, whereSql, bindings, limit) {
   const capped=Math.max(1,Math.min(Number(limit)||2,10));
-  const result=await db.prepare(`SELECT * FROM contact_cards WHERE status='active' AND COALESCE(source_event_id,'')!='' AND ${whereSql}
+  const result=await db.prepare(`SELECT cc.* FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id WHERE cc.status='active' AND COALESCE(cc.source_event_id,'')!='' AND cie.status IN ('created','updated') AND cc.display_name NOT IN ('名片 AI 分析中','名片辨識未完成','名片分析未完成') AND ${whereSql}
     AND (
       COALESCE(json_extract(versions_json,'$._aiCrm.status'),'') NOT IN ('ready','queued','processing')
       OR COALESCE(json_extract(versions_json,'$._aiCrm.analysisVersion'),'')!=?

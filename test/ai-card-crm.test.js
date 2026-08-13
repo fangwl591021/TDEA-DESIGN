@@ -36,7 +36,7 @@ test("old scanned cards are queued without changing card rewards", () => {
   const crm = source("src/ai-card-crm.js");
   const worker = source("src/index.js");
   const calendar = source("src/personal-calendar.js");
-  assert.match(crm, /COALESCE\(source_event_id,''\)!=''/);
+  assert.match(crm, /COALESCE\(cc\.source_event_id,''\)!=''/);
   assert.match(crm, /queueSystemAiCardCrmBackfill/);
   assert.match(worker, /ctx\.waitUntil\(runSystemAiCardCrmBackfill\(env\)\)/);
   assert.match(worker, /queueMemberAiCardCrmBackfill/);

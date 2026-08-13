@@ -333,7 +333,12 @@ async function recognizeWithOpenAI(apiKey, model, images) {
   const firstResult = await callAiResponses(apiKey, { model:model || 'gpt-5.6-terra', reasoning:{effort:'low'}, max_output_tokens:1800, input:[{role:'user',content:firstContent}], text:{format:{type:'json_schema',name:'business_card',strict:true,schema:OCR_SCHEMA}} });
   const firstPassText=outputText(firstResult);
   if(!firstPassText)throw new Error('AI 未回傳第一次名片辨識結果');
-  const firstPass=JSON.parse(firstPassText);
+  return JSON.parse(firstPassText);
+}
+
+// Keep web verification out of the initial OCR fast path.
+async function recognizeVerifiedWithOpenAI(apiKey, model, images) {
+  const firstPass=await recognizeWithOpenAI(apiKey,model,images);
   if(!firstPass.isBusinessCard)return {...firstPass,verificationVersion:OCR_VERIFICATION_VERSION,verificationConfidence:0,verificationNotes:'第一次辨識判定不是名片',verificationSources:[]};
   const verificationContent=[{type:'input_text',text:businessCardVerificationPrompt(firstPass)},...businessCardImages(images)];
   const verifiedResult=await callAiResponses(apiKey,{
@@ -503,7 +508,7 @@ export async function reverifyContactFromSource(db,bucket,userId,id,apiKey,model
     }
     if(!images.length)throw new Error('找不到原始名片圖片');
     let original={};try{original=JSON.parse(row.import_ocr_json || '{}');}catch{}
-    const verified=await recognizeWithOpenAI(apiKey,model,images);
+    const verified=await recognizeVerifiedWithOpenAI(apiKey,model,images);
     if(!verified.isBusinessCard)throw new Error('二次查證無法確認這是商務名片');
     const card=mergeVerifiedCard(row,original,verified);
     const values=[card.displayName,card.englishName,card.companyName,card.jobTitle,card.department,card.mobile,card.companyPhone,card.email,card.websiteUrl,card.lineUrl,card.address,card.serviceDescription,card.note,card.normalizedMobile,card.normalizedEmail,card.normalizedNameCompany];
@@ -555,13 +560,13 @@ export async function queueLegacyFailedImportRetries(db, limit = 3) {
 
 
 export async function queueContactCrmInsights(db, userId, id, force = false) {
-  const row=await db.prepare("SELECT * FROM contact_cards WHERE id=? AND scanner_user_id=? AND status='active'").bind(id,userId).first();
+  const row=await db.prepare(`SELECT cc.* FROM contact_cards cc LEFT JOIN card_import_events cie ON cie.id=cc.source_event_id WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND cc.display_name NOT IN ('名片 AI 分析中','名片辨識未完成','名片分析未完成') AND (COALESCE(cc.source_event_id,'')='' OR cie.status IN ('created','updated'))`).bind(id,userId).first();
   if(!row || (!force && ['queued','processing'].includes(insightMeta(row).status)))return false;
   await db.prepare("UPDATE contact_cards SET versions_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=? AND status='active'").bind(withInsightMeta(row,{status:'queued',cards:{},error:''}),id,userId).run();
   return true;
 }
 export async function processContactInsightsInBackground(db, userId, id, apiKey, model) {
-  const row=await db.prepare("SELECT * FROM contact_cards WHERE id=? AND scanner_user_id=? AND status='active'").bind(id,userId).first();
+  const row=await db.prepare(`SELECT cc.* FROM contact_cards cc LEFT JOIN card_import_events cie ON cie.id=cc.source_event_id WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND cc.display_name NOT IN ('名片 AI 分析中','名片辨識未完成','名片分析未完成') AND (COALESCE(cc.source_event_id,'')='' OR cie.status IN ('created','updated'))`).bind(id,userId).first();
   if(!row)return;
   await db.prepare("UPDATE contact_cards SET versions_json=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(withInsightMeta(row,{status:'processing',error:''}),id).run();
   try {
@@ -620,8 +625,9 @@ export async function queueMemberStaleCardAnalysis(db, userId, staleMinutes = 3)
 
 export async function queueSystemCrmInsightBackfill(db, limit = 6) {
   const cappedLimit=Math.max(1,Math.min(Number(limit) || 6,20));
-  const result=await db.prepare(`SELECT * FROM contact_cards
-    WHERE status='active' AND (
+  const result=await db.prepare(`SELECT cc.* FROM contact_cards cc LEFT JOIN card_import_events cie ON cie.id=cc.source_event_id
+    WHERE cc.status='active' AND cc.display_name NOT IN ('名片 AI 分析中','名片辨識未完成','名片分析未完成')
+      AND (COALESCE(cc.source_event_id,'')='' OR cie.status IN ('created','updated')) AND (
       COALESCE(json_extract(versions_json, '$._crmInsights.status'),'') NOT IN ('ready','queued','processing')
       OR (json_extract(versions_json, '$._crmInsights.status')='ready' AND COALESCE(json_extract(versions_json, '$._crmInsights.analysisVersion'),'')!=?)
       OR (json_extract(versions_json, '$._crmInsights.status')='queued' AND updated_at <= datetime('now','-5 minutes'))
