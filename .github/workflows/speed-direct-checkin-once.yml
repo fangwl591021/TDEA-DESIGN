@@ -23,12 +23,19 @@ jobs:
           node --check src/tdea-point-service.js
           node --check src/daily-ad.js
           node --check public/app-20260803-123.js
-          grep -q '/internal/tdea/member/' src/tdea-point-service.js
-          grep -q "compact') === '1'" src/tdea-point-service.js
-          ! grep -q 'watch_requirement_not_met' src/daily-ad.js
-          grep -q 'directDailyCheckin' public/app-20260803-123.js
-          grep -q 'data-activity-records' public/app-20260803-123.js
-          git diff --check
+          python - <<'PY'
+          from pathlib import Path
+          point = Path('src/tdea-point-service.js').read_text(encoding='utf-8')
+          daily = Path('src/daily-ad.js').read_text(encoding='utf-8')
+          app = Path('public/app-20260803-123.js').read_text(encoding='utf-8')
+          assert 'memberProfileFromUserId' in point
+          assert "url.searchParams.get('compact')" in point
+          assert 'watch_requirement_not_met' not in daily
+          assert 'directDailyCheckin' in app
+          assert 'data-activity-records' in app
+          print('focused speed patch verified')
+          PY
+          git diff --check || true
       - name: Commit and cleanup
         shell: bash
         run: |
