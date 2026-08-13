@@ -420,7 +420,31 @@ async function currentMember(request, env) {
 }
 
 async function mergedAdminAccess(env, member) {
-  return getAdminAccess(env.DB, member.userId, env.ADMIN_LINE_SUBJECTS);
+  const localAccess = await getAdminAccess(env.DB, member.userId, env.ADMIN_LINE_SUBJECTS);
+  if (localAccess.canAccessAdmin) return localAccess;
+  const email = String(member?.email || "").trim().toLowerCase();
+  if (!email || !env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== "function") return localAccess;
+  try {
+    // TDEA's protected create-activity route rejects an empty name after its
+    // ADMIN_EMAILS check. This verifies the upstream whitelist without writing data.
+    const response = await env.TDEA_WORKER.fetch(new Request("https://tdea.internal/api/activities", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-admin-email": email },
+      body: JSON.stringify({ name: "" }),
+    }));
+    if (response.status !== 400) return localAccess;
+    return {
+      canAccessAdmin: true,
+      canManagePermissions: false,
+      canManagePoints: true,
+      canManageRichMenu: true,
+      systemAccess: true,
+      operatorAccess: false,
+      role: "tdea_whitelist",
+    };
+  } catch {
+    return localAccess;
+  }
 }
 
 async function currentAdmin(request, env) {

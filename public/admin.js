@@ -92,7 +92,7 @@ function switchPage(page) {
       node.classList.toggle("active", node.dataset.page === (page === "calendar" ? "courses" : page)),
     );
   const names = {
-    dashboard: ["營運統計中心", "A-KAFFIT 會員、點數、簽到與內容即時概況"],
+    dashboard: ["營運統計中心", "TDEA 會員、點數、簽到與內容即時概況"],
     members: ["會員 CRM", "LINE Login 會員與推薦關係"],
     cards: ["全站名片庫", "會員數位名片與客戶收藏名片"],
     points: ["商脈點數規則", "管理會員服務扣點與各類成功贈點"],
