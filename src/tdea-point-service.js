@@ -247,7 +247,7 @@ async function readJson(request) {
 
 export async function handleTdeaPointService(request, env) {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith('/internal/tdea/points')) return null;
+  if (!url.pathname.startsWith('/internal/tdea/points') && !url.pathname.startsWith('/internal/tdea/member')) return null;
   if (!authorized(request, env)) return json({ success: false, error: 'Forbidden' }, 403);
   if (!env.DB) return json({ success: false, error: 'Point database is unavailable' }, 503);
 
