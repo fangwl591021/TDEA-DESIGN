@@ -1,0 +1,37 @@
+name: Fix direct checkin and activity records once
+on:
+  push:
+    branches:
+      - agent/full-project-transplant
+    paths:
+      - .github/workflows/fix-direct-checkin-records-once.yml
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Apply focused fix
+        run: python .github/scripts/fix-direct-checkin-records.py
+      - name: Verify
+        shell: bash
+        run: |
+          node --check public/app-20260803-123.js
+          grep -q "tdeawork.fangwl591021.workers.dev" public/app-20260803-123.js
+          grep -q 'action==="dailyCheckin"||action==="daily"' public/app-20260803-123.js
+          grep -q 'if (panel === "checkin") return directDailyCheckin(button);' public/app-20260803-123.js
+          grep -q 'state.dailyPanel = "ads";' public/app-20260803-123.js
+      - name: Commit and cleanup
+        shell: bash
+        run: |
+          git config user.name "fangwl591021"
+          git config user.email "50135766+fangwl591021@users.noreply.github.com"
+          git add public/app-20260803-123.js
+          git commit -m "Make daily checkin direct and bypass second LIFF for records"
+          git rm .github/workflows/fix-direct-checkin-records-once.yml .github/scripts/fix-direct-checkin-records.py
+          git commit -m "Remove one-time direct checkin records fix files"
+          git push origin agent/full-project-transplant
