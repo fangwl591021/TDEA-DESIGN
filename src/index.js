@@ -425,12 +425,13 @@ async function mergedAdminAccess(env, member) {
   const email = String(member?.email || "").trim().toLowerCase();
   if (!email || !env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== "function") return localAccess;
   try {
-    // TDEA's protected create-activity route rejects an empty name after its
-    // ADMIN_EMAILS check. This verifies the upstream whitelist without writing data.
-    const response = await env.TDEA_WORKER.fetch(new Request("https://tdea.internal/api/activities", {
+    // The protected upload route rejects a multipart request without a file
+    // after its ADMIN_EMAILS check. It never writes an object for this probe.
+    const form = new FormData();
+    const response = await env.TDEA_WORKER.fetch(new Request("https://tdea.internal/api/uploads", {
       method: "POST",
-      headers: { "content-type": "application/json", "x-admin-email": email },
-      body: JSON.stringify({ name: "" }),
+      headers: { "x-admin-email": email },
+      body: form,
     }));
     if (response.status !== 400) return localAccess;
     return {
