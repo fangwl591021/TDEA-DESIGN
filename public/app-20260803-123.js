@@ -370,7 +370,10 @@ async function renderAuthenticatedMember() {
   if (state.courseSession) state.tab = "courses";
   if (state.tab === "wallet") return wallet();
   if (state.tab === "courses") return courses();
-  if (state.tab === "daily") return daily();
+  if (state.tab === "daily") {
+    state.dailyPanel = "ads";
+    return daily();
+  }
   if (state.tab === "card") return card();
   if (state.tab === "zodiac") return zodiac();
   if (state.tab === "cardCollection") return cardCollection();
@@ -1034,7 +1037,7 @@ async function openBlogPost(slug){
   }catch(error){alert(error.message||"文章載入失敗")}
 }
 function bindBlogCards(){document.querySelectorAll("[data-blog-slug]").forEach((button)=>button.onclick=()=>openBlogPost(button.dataset.blogSlug))}
-function bindPortalActions(){document.querySelectorAll("[data-home-action]").forEach((button)=>(button.onclick=async()=>{const action=button.dataset.homeAction;if(action==="dailyCheckin")return directDailyCheckin(button);if(action==="share")return showShareQr();if(action==="zodiacPopup")return showZodiacDialog();if(action==="profile")return showProfileDialog(false);if(action==="aiWear")return openAiWear();if(action==="walletqr"){const panel=$("#walletPanel");if(!panel){state.tab="wallet";return render()}$(".site-home-frame")?.classList.add("hidden");panel.classList.remove("hidden");panel.scrollIntoView({behavior:"smooth",block:"start"});return showWalletQr("homeWalletQr","homeWalletExpire")}state.tab=action==="home"?"home":action==="daily"?"daily":action==="courses"?"courses":action==="card"?"card":action==="zodiac"?"zodiac":action==="cardCollection"?"cardCollection":action==="smartMatch"?"smartMatch":action==="calendar"?"calendar":action==="tasks"?"tasks":"wallet";await render()}));bindOfficialSiteLinks();bindBlogCards();$("#copyInvite")?.addEventListener("click",copyInvite);document.querySelectorAll("[data-close-share]").forEach((node)=>node.addEventListener("click",closeShareQr))}
+function bindPortalActions(){document.querySelectorAll("[data-home-action]").forEach((button)=>(button.onclick=async()=>{const action=button.dataset.homeAction;if(action==="dailyCheckin"||action==="daily")return directDailyCheckin(button);if(action==="share")return showShareQr();if(action==="zodiacPopup")return showZodiacDialog();if(action==="profile")return showProfileDialog(false);if(action==="aiWear")return openAiWear();if(action==="walletqr"){const panel=$("#walletPanel");if(!panel){state.tab="wallet";return render()}$(".site-home-frame")?.classList.add("hidden");panel.classList.remove("hidden");panel.scrollIntoView({behavior:"smooth",block:"start"});return showWalletQr("homeWalletQr","homeWalletExpire")}state.tab=action==="home"?"home":action==="daily"?"daily":action==="courses"?"courses":action==="card"?"card":action==="zodiac"?"zodiac":action==="cardCollection"?"cardCollection":action==="smartMatch"?"smartMatch":action==="calendar"?"calendar":action==="tasks"?"tasks":"wallet";await render()}));bindOfficialSiteLinks();bindBlogCards();$("#copyInvite")?.addEventListener("click",copyInvite);document.querySelectorAll("[data-close-share]").forEach((node)=>node.addEventListener("click",closeShareQr))}
 async function mlmMemberPointBalance(fallbackBalance=0){
   try{
     mlmPointSyncError="";
@@ -1543,18 +1546,24 @@ async function daily(targetSelector = "") {
   const panelTabs = `<div class="daily-top-tabs daily-panel-tabs" role="tablist" aria-label="TDEA 服務"><button type="button" class="daily-top-tab ${state.dailyPanel === "checkin" ? "active" : ""}" data-daily-panel="checkin">每日簽到</button><button type="button" class="daily-top-tab ${state.dailyPanel === "activities" ? "active" : ""}" data-daily-panel="activities">活動報名</button><button type="button" class="daily-top-tab ${state.dailyPanel === "ads" ? "active" : ""}" data-daily-panel="ads">廣告贈點</button><button type="button" class="daily-top-tab" data-activity-records>活動紀錄</button></div>`;
   const renderTabs = (campaigns = []) => campaigns.length ? `<div class="daily-top-tabs daily-campaign-tabs" role="tablist" aria-label="簽到活動">${campaigns.map((campaign) => `<button type="button" class="daily-top-tab ${state.dailyCampaignId === campaign.id ? "active" : ""}" data-daily-campaign="${esc(campaign.id)}">${esc(campaign.name || "簽到活動")}</button>`).join("")}</div>` : "";
   const bindTabs = () => {
-    getDailyRoot()?.querySelectorAll("[data-daily-panel]").forEach((button) => { button.onclick = () => { state.dailyPanel = button.dataset.dailyPanel || "checkin"; daily(targetSelector); }; });
+    getDailyRoot()?.querySelectorAll("[data-daily-panel]").forEach((button) => { button.onclick = async () => {
+      const panel = button.dataset.dailyPanel || "checkin";
+      if (panel === "checkin") return directDailyCheckin(button);
+      state.dailyPanel = panel;
+      daily(targetSelector);
+    }; });
     getDailyRoot()?.querySelector("[data-activity-records]")?.addEventListener("click", async () => {
       try {
         await initLiffOnce();
         const profile = liff.isLoggedIn() ? await liff.getProfile().catch(() => null) : null;
         const uid = String(profile?.userId || '').trim();
-        const url = new URL('https://liff.line.me/2005868456-cfANNVou');
+        if (!uid) throw new Error('missing_line_uid');
+        const url = new URL('https://tdeawork.fangwl591021.workers.dev/');
         url.searchParams.set('query', '1');
-        if (uid) url.searchParams.set('lineUserId', uid);
+        url.searchParams.set('lineUserId', uid);
         location.href = url.toString();
       } catch {
-        location.href = 'https://liff.line.me/2005868456-cfANNVou?query=1';
+        alert('目前會員身分無法讀取，請重新開啟會員中心後再試。');
       }
     });
     getDailyRoot()?.querySelectorAll("[data-daily-campaign]").forEach((button) => { button.onclick = () => { state.dailyPanel = "checkin"; state.dailyCampaignId = button.dataset.dailyCampaign; daily(targetSelector); }; });
