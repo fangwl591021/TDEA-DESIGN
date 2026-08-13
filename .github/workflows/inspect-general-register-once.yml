@@ -1,0 +1,17 @@
+name: Inspect general register once
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-general-register-once.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+      - name: Inspect registration handlers
+        run: |
+          grep -n -A140 -B50 -E 'verifyTdeaRosterMember\(|memberType|profile_completed_at|registration_completed|完成註冊|member_profiles' src/index.js | head -700 || true
