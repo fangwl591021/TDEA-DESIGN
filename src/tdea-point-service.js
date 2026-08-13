@@ -45,6 +45,31 @@ async function userIdFromLineUid(db, lineUserId) {
   return row?.user_id ? resolveCanonicalMemberId(db, row.user_id) : '';
 }
 
+async function memberProfileFromUserId(db, userId) {
+  if (!userId) return null;
+  return db.prepare(`
+    SELECT mp.platform_user_id AS user_id, mp.display_name, mp.full_name, mp.phone, mp.email,
+      mp.gender, mp.birthday, mp.member_number, mp.company_member_number, mp.member_type,
+      mp.roster_member_number, mp.roster_verified_at, mp.roster_verified_name, mp.roster_source,
+      mp.profile_completed_at
+    FROM member_profiles mp
+    JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'
+    WHERE mp.platform_user_id = ? LIMIT 1
+  `).bind(userId).first();
+}
+
+function publicMemberProfile(row) {
+  if (!row) return null;
+  return {
+    userId: row.user_id || '', displayName: row.display_name || '', fullName: row.full_name || '',
+    phone: row.phone || '', email: row.email || '', gender: row.gender || '', birthday: row.birthday || '',
+    memberNumber: row.member_number || '', companyMemberNumber: row.company_member_number || '',
+    memberType: row.member_type || 'general', rosterMemberNumber: row.roster_member_number || '',
+    rosterVerifiedAt: row.roster_verified_at || '', rosterVerifiedName: row.roster_verified_name || '',
+    rosterSource: row.roster_source || '', profileCompletedAt: row.profile_completed_at || ''
+  };
+}
+
 async function userIdFromRosterNumber(db, memberNo) {
   const normalized = clean(memberNo, 120).toUpperCase();
   if (!normalized) return '';
@@ -226,6 +251,15 @@ export async function handleTdeaPointService(request, env) {
   if (!authorized(request, env)) return json({ success: false, error: 'Forbidden' }, 403);
   if (!env.DB) return json({ success: false, error: 'Point database is unavailable' }, 503);
 
+  const memberMatch = url.pathname.match(/^\/internal\/tdea\/member\/([^/]+)$/);
+  if (request.method === 'GET' && memberMatch) {
+    const lineUserId = decodeURIComponent(memberMatch[1]);
+    const userId = await userIdFromLineUid(env.DB, lineUserId);
+    if (!userId) return json({ success: false, error: 'LINE member not found' }, 404);
+    const member = publicMemberProfile(await memberProfileFromUserId(env.DB, userId));
+    return json({ success: true, registered: Boolean(member?.profileCompletedAt), userId, lineUserId, member });
+  }
+
   const balanceMatch = url.pathname.match(/^\/internal\/tdea\/points\/([^/]+)$/);
   if (request.method === 'GET' && balanceMatch) {
     const lineUserId = decodeURIComponent(balanceMatch[1]);
@@ -311,6 +345,10 @@ export async function handleTdeaPointService(request, env) {
         note: clean(body.note, 500),
         requestId: clean(body.requestId, 120),
       });
+      if (url.searchParams.get('compact') === '1') {
+        const entry = result?.entry || {};
+        return json({ success: true, userId, lineUserId, result, balance: Number(entry.balanceAfter ?? entry.balance_after ?? 0) });
+      }
       return json({ success: true, userId, lineUserId, result, wallet: await getWallet(env.DB, userId) });
     } catch (error) {
       return json({ success: false, error: error?.message || 'Point adjustment failed' }, 400);

@@ -257,24 +257,6 @@ export async function checkInDailyAd(db, userId, campaignId = "") {
     });
     return { ok: true, duplicate: true, checkinId: alreadyCheckedIn.id, pointResult };
   }
-  const qualifying = await db
-    .prepare(
-      `
-    SELECT COUNT(*) AS count FROM daily_ad_view_events
-    WHERE platform_user_id = ? AND campaign_id = ? AND business_date = ? AND qualified_at IS NOT NULL
-  `,
-    )
-    .bind(userId, campaign.id, date)
-    .first();
-  if (
-    Number(qualifying?.count || 0) < Number(campaign.required_creative_count)
-  ) {
-    return {
-      ok: false,
-      reason: "watch_requirement_not_met",
-      qualifiedCreativeCount: Number(qualifying?.count || 0),
-    };
-  }
   const checkinId = newId("dailycheckin");
   try {
     await db
