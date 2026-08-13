@@ -1,0 +1,102 @@
+from pathlib import Path
+
+p = Path('public/app-20260803-123.js')
+s = p.read_text(encoding='utf-8')
+anchor = "function tdeaActivityRecordMarkup(rows = []) {"
+if anchor not in s:
+    raise SystemExit('markup anchor missing')
+helper = r'''function tdeaRecordPaymentStatus(payment = {}) {
+  const amount = Number(payment.amount || 0);
+  if (amount <= 0 || payment.status === 'free') return '免付款';
+  if (payment.status === 'paid') return '已完成付款';
+  if (payment.status === 'reported') return '已回報，待核對';
+  if (payment.status === 'cancelled') return '付款已取消';
+  if (payment.status === 'refunded') return '已退款';
+  return '尚未付款';
+}
+function tdeaRecordPaymentMarkup(row = {}) {
+  const payment = row.payment || {};
+  const activity = row.activity || {};
+  const amount = Number(payment.amount || activity.paymentAmount || 0);
+  if (amount <= 0) return '';
+  const remittanceInfo = activity.remittanceInfo || activity.paymentInfo || activity.bankInfo || '';
+  const canReport = row.status !== 'cancelled' && payment.status !== 'paid';
+  return `<section class="tdea-record-payment" style="margin:14px 0;padding:14px;border:1px solid #f1d5c8;border-radius:12px;background:#fffaf7;display:grid;gap:8px">
+    <div><strong>報名費：</strong>NT$ ${esc(amount.toLocaleString())}</div>
+    <div><strong>付款狀態：</strong>${esc(tdeaRecordPaymentStatus(payment))}</div>
+    ${remittanceInfo ? `<div style="white-space:pre-wrap"><strong>匯款資訊：</strong>${esc(remittanceInfo)}</div>` : `<div class="muted">尚未設定匯款資訊，請聯絡主辦單位。</div>`}
+    ${payment.remittanceLast5 ? `<div><strong>已回報末五碼：</strong>${esc(payment.remittanceLast5)}</div>` : ''}
+    ${canReport ? `<form data-tdea-payment-report="${esc(row.id || '')}" data-query-code="${esc(row.queryCode || '')}" style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:4px">
+      <input name="remittanceLast5" inputmode="numeric" maxlength="5" pattern="[0-9]{5}" placeholder="輸入匯款帳號末五碼" required style="min-height:44px;border:1px solid #dcc9c0;border-radius:10px;padding:8px 12px;font-size:16px">
+      <input name="note" maxlength="120" placeholder="備註（選填）" style="min-height:44px;border:1px solid #dcc9c0;border-radius:10px;padding:8px 12px;font-size:16px">
+      <button type="submit" class="btn">回報匯款</button>
+    </form>` : ''}
+  </section>`;
+}
+'''
+s = s.replace(anchor, helper + anchor, 1)
+old = '''      ${checkinUrl && !row.checkedInAt ? `<div class="tdea-record-qr" data-qr-url="${esc(checkinUrl)}"></div><small class="muted">活動核銷 QR</small>` : ''}
+      ${canCancel ? `<button type="button" class="btn alt" data-cancel-native-record="${esc(row.id || '')}" data-query-code="${esc(row.queryCode || '')}">取消報名</button>` : ''}'''
+new = '''      ${tdeaRecordPaymentMarkup(row)}
+      ${checkinUrl && !row.checkedInAt ? `<div class="tdea-record-qr" data-qr-url="${esc(checkinUrl)}"></div><small class="muted">活動核銷 QR</small>` : ''}
+      ${canCancel ? `<button type="button" class="btn alt" data-cancel-native-record="${esc(row.id || '')}" data-query-code="${esc(row.queryCode || '')}">取消報名</button>` : ''}'''
+if old not in s:
+    raise SystemExit('card insertion anchor missing')
+s = s.replace(old, new, 1)
+old2 = "    host.querySelectorAll('[data-cancel-native-record]').forEach((button) => button.onclick = async () => {"
+insert = r'''    host.querySelectorAll('[data-tdea-payment-report]').forEach((form) => form.onsubmit = async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      const data = Object.fromEntries(new FormData(form));
+      try {
+        await withActionFeedback(button, () => api('/v1/tdea-activity-records/payment-report', {
+          method:'POST', body:JSON.stringify({
+            registrationId:form.dataset.tdeaPaymentReport,
+            queryCode:form.dataset.queryCode,
+            remittanceLast5:data.remittanceLast5,
+            note:data.note || ''
+          })
+        }), { busy:'回報中…', success:'已回報' });
+        await showTdeaActivityRecords(targetSelector);
+      } catch (error) { alert(error.message || '匯款回報失敗'); }
+    });
+    host.querySelectorAll('[data-cancel-native-record]').forEach((button) => button.onclick = async () => {'''
+if old2 not in s:
+    raise SystemExit('handler anchor missing')
+s = s.replace(old2, insert, 1)
+p.write_text(s, encoding='utf-8')
+
+p = Path('src/index.js')
+s = p.read_text(encoding='utf-8')
+anchor = '  if (request.method === "POST" && url.pathname === "/v1/tdea-activity-records/cancel") {'
+if anchor not in s:
+    raise SystemExit('cancel route anchor missing')
+route = r'''  if (request.method === "POST" && url.pathname === "/v1/tdea-activity-records/payment-report") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    if (!env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== "function") return json({ success: false, error: "TDEA activity service unavailable" }, 503);
+    const lineUserId = await currentVerifiedLineUserId(member.userId);
+    if (!lineUserId) return json({ success: false, error: "目前會員尚未綁定 LINE 身分" }, 409);
+    const body = (await readJson(request)) || {};
+    const registrationId = String(body.registrationId || '').trim();
+    const queryCode = String(body.queryCode || '').trim();
+    const remittanceLast5 = String(body.remittanceLast5 || '').replace(/\D/g, '');
+    const note = String(body.note || '').trim().slice(0, 120);
+    if (!registrationId || !queryCode) return badRequest("缺少活動紀錄識別資料");
+    if (remittanceLast5.length !== 5) return badRequest("請輸入匯款帳號末五碼");
+    const listResponse = await env.TDEA_WORKER.fetch(`https://tdeawork.fangwl591021.workers.dev/api/native-registrations/me?lineUserId=${encodeURIComponent(lineUserId)}`, { headers: { accept: 'application/json' } });
+    const listPayload = await listResponse.json().catch(() => ({}));
+    const owned = Array.isArray(listPayload.data) && listPayload.data.some((row) => String(row?.id || '') === registrationId && String(row?.queryCode || '') === queryCode);
+    if (!listResponse.ok || listPayload.success !== true || !owned) return json({ success: false, error: "找不到本人的活動紀錄" }, 404);
+    const upstream = await env.TDEA_WORKER.fetch('https://tdeawork.fangwl591021.workers.dev/api/native-registrations/payment-report', {
+      method:'POST', headers:{ 'content-type':'application/json', accept:'application/json' },
+      body:JSON.stringify({ registrationId, queryCode, remittanceLast5, note })
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || payload.success !== true) return json({ success:false, error:payload.message || payload.error || "匯款回報失敗" }, upstream.status || 502);
+    return json({ success:true, data:payload.data || null });
+  }
+
+'''
+s = s.replace(anchor, route + anchor, 1)
+p.write_text(s, encoding='utf-8')
