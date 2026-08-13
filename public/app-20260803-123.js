@@ -1540,6 +1540,34 @@ function tdeaActivityStatus(row = {}) {
   if (row.checkedInAt) return '已核銷';
   return '已報名';
 }
+function tdeaRecordPaymentStatus(payment = {}) {
+  const amount = Number(payment.amount || 0);
+  if (amount <= 0 || payment.status === 'free') return '免付款';
+  if (payment.status === 'paid') return '已完成付款';
+  if (payment.status === 'reported') return '已回報，待核對';
+  if (payment.status === 'cancelled') return '付款已取消';
+  if (payment.status === 'refunded') return '已退款';
+  return '尚未付款';
+}
+function tdeaRecordPaymentMarkup(row = {}) {
+  const payment = row.payment || {};
+  const activity = row.activity || {};
+  const amount = Number(payment.amount || activity.paymentAmount || 0);
+  if (amount <= 0) return '';
+  const remittanceInfo = activity.remittanceInfo || activity.paymentInfo || activity.bankInfo || '';
+  const canReport = row.status !== 'cancelled' && payment.status !== 'paid';
+  return `<section class="tdea-record-payment" style="margin:14px 0;padding:14px;border:1px solid #f1d5c8;border-radius:12px;background:#fffaf7;display:grid;gap:8px">
+    <div><strong>報名費：</strong>NT$ ${esc(amount.toLocaleString())}</div>
+    <div><strong>付款狀態：</strong>${esc(tdeaRecordPaymentStatus(payment))}</div>
+    ${remittanceInfo ? `<div style="white-space:pre-wrap"><strong>匯款資訊：</strong>${esc(remittanceInfo)}</div>` : `<div class="muted">尚未設定匯款資訊，請聯絡主辦單位。</div>`}
+    ${payment.remittanceLast5 ? `<div><strong>已回報末五碼：</strong>${esc(payment.remittanceLast5)}</div>` : ''}
+    ${canReport ? `<form data-tdea-payment-report="${esc(row.id || '')}" data-query-code="${esc(row.queryCode || '')}" style="display:grid;grid-template-columns:1fr;gap:8px;margin-top:4px">
+      <input name="remittanceLast5" inputmode="numeric" maxlength="5" pattern="[0-9]{5}" placeholder="輸入匯款帳號末五碼" required style="min-height:44px;border:1px solid #dcc9c0;border-radius:10px;padding:8px 12px;font-size:16px">
+      <input name="note" maxlength="120" placeholder="備註（選填）" style="min-height:44px;border:1px solid #dcc9c0;border-radius:10px;padding:8px 12px;font-size:16px">
+      <button type="submit" class="btn">回報匯款</button>
+    </form>` : ''}
+  </section>`;
+}
 function tdeaActivityRecordMarkup(rows = []) {
   if (!rows.length) return '<div class="card muted">目前沒有活動紀錄。</div>';
   return `<section class="course-records">${rows.map((row) => {
@@ -1554,6 +1582,7 @@ function tdeaActivityRecordMarkup(rows = []) {
         ${row.submittedAt ? `<div><span>報名時間</span><b>${esc(new Date(row.submittedAt).toLocaleString('zh-TW',{hour12:false}))}</b></div>` : ''}
         ${row.checkedInAt ? `<div><span>核銷時間</span><b>${esc(new Date(row.checkedInAt).toLocaleString('zh-TW',{hour12:false}))}</b></div>` : ''}
       </div>
+      ${tdeaRecordPaymentMarkup(row)}
       ${checkinUrl && !row.checkedInAt ? `<div class="tdea-record-qr" data-qr-url="${esc(checkinUrl)}"></div><small class="muted">活動核銷 QR</small>` : ''}
       ${canCancel ? `<button type="button" class="btn alt" data-cancel-native-record="${esc(row.id || '')}" data-query-code="${esc(row.queryCode || '')}">取消報名</button>` : ''}
     </article>`;
@@ -1572,6 +1601,22 @@ async function showTdeaActivityRecords(targetSelector = '') {
       const value = node.dataset.qrUrl || '';
       if (!value || !window.QRCode) return;
       new QRCode(node, { text:value, width:180, height:180 });
+    });
+    host.querySelectorAll('[data-tdea-payment-report]').forEach((form) => form.onsubmit = async (event) => {
+      event.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      const data = Object.fromEntries(new FormData(form));
+      try {
+        await withActionFeedback(button, () => api('/v1/tdea-activity-records/payment-report', {
+          method:'POST', body:JSON.stringify({
+            registrationId:form.dataset.tdeaPaymentReport,
+            queryCode:form.dataset.queryCode,
+            remittanceLast5:data.remittanceLast5,
+            note:data.note || ''
+          })
+        }), { busy:'回報中…', success:'已回報' });
+        await showTdeaActivityRecords(targetSelector);
+      } catch (error) { alert(error.message || '匯款回報失敗'); }
     });
     host.querySelectorAll('[data-cancel-native-record]').forEach((button) => button.onclick = async () => {
       if (!confirm('確定取消這筆活動報名？')) return;

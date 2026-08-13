@@ -1775,6 +1775,32 @@ async function app(request, env, ctx) {
     }
   }
 
+  if (request.method === "POST" && url.pathname === "/v1/tdea-activity-records/payment-report") {
+    const member = await currentMember(request, env);
+    if (!member) return json({ success: false, error: "Unauthorized" }, 401);
+    if (!env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== "function") return json({ success: false, error: "TDEA activity service unavailable" }, 503);
+    const lineUserId = await currentVerifiedLineUserId(member.userId);
+    if (!lineUserId) return json({ success: false, error: "目前會員尚未綁定 LINE 身分" }, 409);
+    const body = (await readJson(request)) || {};
+    const registrationId = String(body.registrationId || '').trim();
+    const queryCode = String(body.queryCode || '').trim();
+    const remittanceLast5 = String(body.remittanceLast5 || '').replace(/\D/g, '');
+    const note = String(body.note || '').trim().slice(0, 120);
+    if (!registrationId || !queryCode) return badRequest("缺少活動紀錄識別資料");
+    if (remittanceLast5.length !== 5) return badRequest("請輸入匯款帳號末五碼");
+    const listResponse = await env.TDEA_WORKER.fetch(`https://tdeawork.fangwl591021.workers.dev/api/native-registrations/me?lineUserId=${encodeURIComponent(lineUserId)}`, { headers: { accept: 'application/json' } });
+    const listPayload = await listResponse.json().catch(() => ({}));
+    const owned = Array.isArray(listPayload.data) && listPayload.data.some((row) => String(row?.id || '') === registrationId && String(row?.queryCode || '') === queryCode);
+    if (!listResponse.ok || listPayload.success !== true || !owned) return json({ success: false, error: "找不到本人的活動紀錄" }, 404);
+    const upstream = await env.TDEA_WORKER.fetch('https://tdeawork.fangwl591021.workers.dev/api/native-registrations/payment-report', {
+      method:'POST', headers:{ 'content-type':'application/json', accept:'application/json' },
+      body:JSON.stringify({ registrationId, queryCode, remittanceLast5, note })
+    });
+    const payload = await upstream.json().catch(() => ({}));
+    if (!upstream.ok || payload.success !== true) return json({ success:false, error:payload.message || payload.error || "匯款回報失敗" }, upstream.status || 502);
+    return json({ success:true, data:payload.data || null });
+  }
+
   if (request.method === "POST" && url.pathname === "/v1/tdea-activity-records/cancel") {
     const member = await currentMember(request, env);
     if (!member) return json({ success: false, error: "Unauthorized" }, 401);
