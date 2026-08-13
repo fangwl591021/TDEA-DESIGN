@@ -1,0 +1,29 @@
+name: Run general registration bypass once
+on:
+  push:
+    paths:
+      - 'scripts/fix-general-registration-bypass.py'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Apply patch
+        run: python scripts/fix-general-registration-bypass.py
+      - name: Verify
+        run: |
+          node --check src/index.js
+          grep -n -A8 -B3 "memberType === 'general'" src/index.js
+      - name: Commit and cleanup
+        run: |
+          rm -f scripts/fix-general-registration-bypass.py .github/workflows/run-general-registration-bypass-once.yml .github/workflows/fix-general-registration-bypass-once.yml .github/workflows/inspect-general-register-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/index.js scripts .github/workflows
+          git commit -m "Allow general member self registration without roster lookup"
+          git push origin HEAD:agent/full-project-transplant
