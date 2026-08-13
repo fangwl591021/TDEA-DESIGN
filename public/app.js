@@ -2769,7 +2769,7 @@ function openRosterMemberNumberLookup(dialog) {
   if (!["association", "vendor"].includes(memberType)) return alert("請先選擇協會會員或廠商會員");
   const modal = document.createElement("div");
   modal.className = "ak-roster-lookup-dialog";
-  modal.innerHTML = `<div class="ak-roster-lookup-backdrop"></div><section class="ak-roster-lookup-sheet" role="dialog" aria-modal="true" aria-labelledby="rosterLookupTitle"><button type="button" class="ak-roster-lookup-close" aria-label="關閉">×</button><h2 id="rosterLookupTitle">會員編號查詢</h2><p>輸入姓名／公司名稱，從 TDEA ${memberType === "vendor" ? "廠商" : "協會"}名冊查詢會員編號。</p><label>姓名／公司名稱<input id="rosterLookupName" maxlength="120" autocomplete="name" value="${esc(dialog.querySelector("#fullName")?.value || "")}"></label><button type="button" class="btn" id="rosterLookupSearch">查詢</button><div id="rosterLookupResult" class="ak-roster-lookup-result" aria-live="polite"></div></section>`;
+  modal.innerHTML = `<div class="ak-roster-lookup-backdrop"></div><section class="ak-roster-lookup-sheet" role="dialog" aria-modal="true" aria-labelledby="rosterLookupTitle"><button type="button" class="ak-roster-lookup-close" aria-label="關閉">×</button><h2 id="rosterLookupTitle">會員編號查詢</h2><p>輸入姓名，從 TDEA ${memberType === "vendor" ? "廠商" : "協會"}名冊查詢會員編號。</p><label>姓名<input id="rosterLookupName" maxlength="120" autocomplete="name" value="${esc(dialog.querySelector("#fullName")?.value || "")}"></label><button type="button" class="btn" id="rosterLookupSearch">查詢</button><div id="rosterLookupResult" class="ak-roster-lookup-result" aria-live="polite"></div></section>`;
   const close = () => modal.remove();
   modal.querySelector(".ak-roster-lookup-backdrop")?.addEventListener("click", close);
   modal.querySelector(".ak-roster-lookup-close")?.addEventListener("click", close);
@@ -2777,7 +2777,7 @@ function openRosterMemberNumberLookup(dialog) {
   const search = async () => {
     const button = modal.querySelector("#rosterLookupSearch");
     const name = modal.querySelector("#rosterLookupName")?.value.trim() || "";
-    if (!name) return alert("請輸入姓名／公司名稱");
+    if (!name) return alert("請輸入姓名");
     const result = modal.querySelector("#rosterLookupResult");
     try {
       await withActionFeedback(button, async () => {
@@ -2816,7 +2816,7 @@ function profileFormMarkup(required = false) {
     <div class="member-logo-upload"><div class="member-logo-preview">${logo}</div><div><strong>Logo 圖片</strong><label class="btn alt member-logo-button">選擇圖片<input id="memberLogoFile" type="file" accept="image/jpeg,image/png,image/webp" hidden></label><small>JPEG、PNG、WebP，最大 3MB</small></div></div>
     <label>顯示名稱</label><input id="displayName" value="${esc(state.member.displayName || "")}" maxlength="120" required>
     <label>會員類型</label><select id="memberType" required><option value="">請選擇</option><option value="general" ${state.member.memberType === "general" ? "selected" : ""}>一般會員</option><option value="association" ${state.member.memberType === "association" ? "selected" : ""}>協會會員</option><option value="vendor" ${state.member.memberType === "vendor" ? "selected" : ""}>廠商會員</option></select>
-    <label>姓名／公司名稱</label><input id="fullName" value="${esc(state.member.fullName || "")}" maxlength="120" autocomplete="name" required>
+    <label>姓名</label><input id="fullName" value="${esc(state.member.fullName || "")}" maxlength="120" autocomplete="name" required>
     <label>行動電話</label><input id="phone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(state.member.phone || "")}" placeholder="0912345678" maxlength="20" ${state.member.phone ? "readonly" : ""} required>
     <div id="rosterMemberNumberField"><div class="member-roster-heading"><label>會員編號</label><button type="button" id="lookupRosterMemberNumber">查詢會員編號</button></div><input id="rosterMemberNumber" value="${esc(state.member.rosterMemberNumber || "")}" maxlength="80" autocomplete="off"><small>協會會員與廠商會員必填，系統會到 TDEA 正式名冊核對。</small></div>
     <p id="rosterBindingStatus" class="member-registration-number">${rosterBindingStatus}</p>
@@ -2873,7 +2873,7 @@ function bindProfileForm(dialog, required = false) {
     const button = q("#save");
     const birthday = birthdayPassword(q("#birthday").value);
     if (!q("#displayName").value.trim()) return alert("請輸入顯示名稱");
-    if (!q("#fullName").value.trim()) return alert("請輸入姓名／公司名稱");
+    if (!q("#fullName").value.trim()) return alert("請輸入姓名");
     const phone = q("#phone").value.replace(/[^\d+]/g, "");
     if (!/^(?:\+886|0)9\d{8}$/.test(phone)) return alert("請輸入正確的台灣行動電話");
     if (!q("#memberType").value) return alert("請選擇會員類型");
