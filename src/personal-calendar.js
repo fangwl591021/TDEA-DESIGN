@@ -1,6 +1,8 @@
 import { newId } from "./member-repository.js";
+import { listMyCourseSessions } from "./courses.js";
 
 const SYSTEM_LABELS = [
+  { sourceType: "company", name: "活動／課程", color: "#2563eb", sortOrder: 10 },
   { sourceType: "personal", name: "未分類", color: "#b65d79", sortOrder: 20 },
   { sourceType: "birthday", name: "生日", color: "#d49121", sortOrder: 30 },
 ];
@@ -214,7 +216,7 @@ export async function listPersonalCalendar(db, userId, { from, to }) {
   const start = iso(from);
   const end = iso(to);
   const labelRows = await db.prepare("SELECT * FROM personal_calendar_labels WHERE platform_user_id = ? ORDER BY sort_order, created_at").bind(userId).all();
-  const labels = (labelRows.results || []).map(mapLabel).filter((label) => label.sourceType !== "company");
+  const labels = (labelRows.results || []).map(mapLabel);
   const privateRows = await db.prepare(`
     SELECT e.*, l.source_type, l.name AS label_name, l.color AS label_color, cc.display_name AS contact_name
     FROM personal_calendar_events e
@@ -231,8 +233,40 @@ export async function listPersonalCalendar(db, userId, { from, to }) {
     ORDER BY cc.display_name LIMIT 200
   `).bind(userId).all();
   const birthdayLabel = labels.find((label) => label.sourceType === "birthday");
+  const companyLabel = labels.find((label) => label.sourceType === "company");
   const events = (privateRows.results || []).map(mapPrivateEvent);
   if (birthdayLabel) events.push(...await birthdayEvents(db, userId, birthdayLabel, start, end));
+  if (companyLabel) {
+    const sessions = await listMyCourseSessions(db, userId);
+    for (const session of sessions) {
+      if (session.registrationStatus && session.registrationStatus !== "registered") continue;
+      const startsAt = String(session.startsAt || "");
+      const endsAt = String(session.endsAt || session.startsAt || "");
+      if (!startsAt || !endsAt || endsAt < start || startsAt >= end) continue;
+      const location = [session.venueName, session.venueAddress].filter(Boolean).join("｜") || session.meetingUrl || "";
+      events.push({
+        id: `company:${session.sessionId}`,
+        sourceType: "company",
+        labelId: companyLabel.id,
+        labelName: companyLabel.name,
+        color: companyLabel.color,
+        title: session.title || session.courseTitle || "活動／課程",
+        description: session.courseDescription || "",
+        location,
+        startsAt,
+        endsAt,
+        allDay: false,
+        reminderMinutes: 60,
+        recurrence: "none",
+        contactCardId: "",
+        contactName: "",
+        readonly: true,
+        courseSessionId: session.sessionId || "",
+        registeredAt: session.registeredAt || "",
+        attendanceAt: session.attendanceAt || "",
+      });
+    }
+  }
   events.sort((a, b) => Date.parse(a.startsAt) - Date.parse(b.startsAt));
   return {
     labels,
