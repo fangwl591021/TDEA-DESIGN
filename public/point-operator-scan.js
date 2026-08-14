@@ -11,6 +11,7 @@
   const esc = (value) => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
   let activeScanValue = '';
   let scanStarting = false;
+  let scannerLiffInitPromise = null;
 
   function closeModal() { document.querySelector('.point-op-layer')?.remove(); }
   function modal(markup) {
@@ -22,6 +23,26 @@
     layer.addEventListener('click', e => { if (e.target === layer || e.target.closest('[data-point-op-close]')) closeModal(); });
     document.body.appendChild(layer);
     return layer;
+  }
+
+  async function ensureLiffReady() {
+    if (!window.liff) throw new Error('LINE LIFF 尚未載入，請從 LINE 重新開啟會員中心');
+    try {
+      if (typeof liff.getContext === 'function' && liff.getContext()) return;
+    } catch (_) {}
+    if (!scannerLiffInitPromise) {
+      scannerLiffInitPromise = (async () => {
+        const response = await fetch('/api/config', { credentials:'same-origin', cache:'no-store' });
+        const config = await response.json().catch(()=>({}));
+        const liffId = String(config?.liffId || '').trim();
+        if (!liffId) throw new Error('尚未設定 LIFF_ID');
+        await liff.init({ liffId });
+      })().catch((error) => {
+        scannerLiffInitPromise = null;
+        throw error;
+      });
+    }
+    await scannerLiffInitPromise;
   }
 
   function showMember(data) {
@@ -55,7 +76,7 @@
       modal('<h2 style="color:#b95121">TDEA 點數掃碼</h2><p>正在檢查操作權限…</p>');
       const access = await api('/v1/point-operator/access');
       if (!access.capabilities?.canScanPoints) throw new Error('此功能僅限授權點數管理人員使用');
-      if (!window.liff) throw new Error('LINE LIFF 尚未載入');
+      await ensureLiffReady();
       if (typeof liff.scanCodeV2 !== 'function') throw new Error('目前 LIFF 不支援 Scan QR，請確認 LIFF 為 Full 並啟用 Scan QR');
       closeModal();
       const scanned = await liff.scanCodeV2();
