@@ -12,19 +12,19 @@ test('wallet scanner accepts only 48-hex dynamic wallet tokens', () => {
   assert.equal(extractWalletToken('https://tdea-design.fangwl591021.workers.dev/i/e/share-token'), '');
 });
 
-test('point scanner reuses existing point-management permission', () => {
-  assert.deepEqual(pointOperatorCapabilities({ canManagePoints:true }), {
+test('point scanner follows the existing admin login authorization', () => {
+  assert.deepEqual(pointOperatorCapabilities({ canAccessAdmin:true }), {
     canScanPoints:true, canCreditPoints:true, canDebitPoints:true,
   });
-  assert.deepEqual(pointOperatorCapabilities({ canManagePoints:false }), {
+  assert.deepEqual(pointOperatorCapabilities({ canAccessAdmin:false }), {
     canScanPoints:false, canCreditPoints:false, canDebitPoints:false,
   });
 });
 
-test('point scanner is LIFF scanCodeV2 based and TDEA wordmark is the entry', () => {
+test('point scanner is LIFF scanCodeV2 based and the member avatar is the entry', () => {
   const ui = source('public/point-operator-scan.js');
-  const html = source('public/index.html');
-  assert.match(ui, /\.ak-wordmark/);
+  const html = source('public/index-20260803-123.txt');
+  assert.match(ui, /\.ak-member-avatar/);
   assert.match(ui, /scanCodeV2/);
   assert.match(ui, /\/v1\/point-operator\/access/);
   assert.match(ui, /\/v1\/point-operator\/preview/);
