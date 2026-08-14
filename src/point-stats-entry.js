@@ -195,7 +195,7 @@ export default {
       catch (error) { console.error('Point stats failed', error); return json({ success:false, error:error?.message || '點數統計讀取失敗' }, 500); }
     }
     const response = await app.fetch(request, env, ctx);
-    if (request.method === 'GET' && ['/admin/','/admin/index.html','/admin.html'].includes(url.pathname)) return injectStatsLink(response);
+    if (request.method === 'GET' && ['/admin','/admin/','/admin/index.html','/admin.html'].includes(url.pathname)) return injectStatsLink(response);
     return response;
   },
   scheduled(controller, env, ctx) { return app.scheduled?.(controller, env, ctx); },
