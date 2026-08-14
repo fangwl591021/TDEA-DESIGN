@@ -5,7 +5,9 @@ import { newId } from './member-repository.js';
 const clean = (value, max = 500) => String(value ?? '').trim().slice(0, max);
 
 export function pointOperatorCapabilities(adminAccess = {}) {
-  const allowed = adminAccess?.canManagePoints === true;
+  // The existing admin "允許登入" permission is represented by canAccessAdmin.
+  // Anyone explicitly allowed to log in may use the point scanner, including operators.
+  const allowed = adminAccess?.canAccessAdmin === true;
   return {
     canScanPoints: allowed,
     canCreditPoints: allowed,
@@ -46,7 +48,7 @@ async function activeWalletToken(db, rawValue) {
 export async function previewPointWallet(db, { rawValue, operatorUserId, adminAccess }) {
   const capabilities = pointOperatorCapabilities(adminAccess);
   if (!capabilities.canScanPoints) {
-    const error = new Error('此功能僅限授權點數管理人員使用');
+    const error = new Error('此功能僅限已允許登入的後台人員使用');
     error.status = 403;
     throw error;
   }
