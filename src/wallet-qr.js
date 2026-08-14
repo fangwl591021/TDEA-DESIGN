@@ -13,9 +13,9 @@ export async function issueWalletToken(db, userId, purpose = 'member_identificat
   const token = randomToken();
   await db.prepare(`
     INSERT INTO wallet_tokens (id, token_hash, platform_user_id, purpose, expires_at)
-    VALUES (?, ?, ?, ?, datetime('now', '+60 seconds'))
+    VALUES (?, ?, ?, ?, datetime('now', '+10 minutes'))
   `).bind(newId('wallettoken'), await sha256(token), userId, purpose).run();
-  return { token, expiresIn: 60, purpose };
+  return { token, expiresIn: 600, purpose };
 }
 
 export async function resolveWalletToken(db, rawToken, scannerLabel = '') {
