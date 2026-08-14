@@ -78,7 +78,14 @@ async function fixedDailyCheckIn(db, userId) {
     LIMIT 1
   `).bind(idempotencyKey).first();
   if (existing) {
-    return { ok:true, duplicate:true, pointResult:{ awarded:false, duplicate:true, entry:existing }, businessDate:date };
+    return {
+      awarded:false,
+      alreadyChecked:true,
+      points:0,
+      date,
+      balance:Number(existing.balance_after || 0),
+      entryId:existing.id,
+    };
   }
 
   let account = await db.prepare(`
@@ -98,7 +105,8 @@ async function fixedDailyCheckIn(db, userId) {
     `).bind(userId).first();
   }
 
-  const balanceAfter = Number(account?.balance || 0) + 1;
+  const balanceBefore = Number(account?.balance || 0);
+  const balanceAfter = balanceBefore + 1;
   const entryId = newId('ledger');
   try {
     await db.batch([
@@ -120,21 +128,37 @@ async function fixedDailyCheckIn(db, userId) {
         date,
         idempotencyKey,
         balanceAfter,
-        JSON.stringify({ source:'simple_daily_checkin', businessDate:date }),
+        JSON.stringify({ source:'direct_daily_checkin', businessDate:date }),
       ),
     ]);
   } catch (error) {
     if (String(error?.message || '').includes('UNIQUE constraint failed: point_ledger_entries.idempotency_key')) {
-      const duplicate = await db.prepare(`SELECT id, delta, balance_after FROM point_ledger_entries WHERE idempotency_key = ?`).bind(idempotencyKey).first();
-      return { ok:true, duplicate:true, pointResult:{ awarded:false, duplicate:true, entry:duplicate }, businessDate:date };
+      const duplicate = await db.prepare(`
+        SELECT id, delta, balance_after
+        FROM point_ledger_entries
+        WHERE idempotency_key = ?
+        LIMIT 1
+      `).bind(idempotencyKey).first();
+      return {
+        awarded:false,
+        alreadyChecked:true,
+        points:0,
+        date,
+        balance:Number(duplicate?.balance_after || balanceBefore),
+        entryId:duplicate?.id || '',
+      };
     }
     throw error;
   }
+
   return {
-    ok:true,
-    duplicate:false,
-    pointResult:{ awarded:true, duplicate:false, entry:{ id:entryId, delta:1, balanceAfter } },
-    businessDate:date,
+    awarded:true,
+    alreadyChecked:false,
+    points:1,
+    date,
+    balanceBefore,
+    balance:balanceAfter,
+    entryId,
   };
 }
 
@@ -144,14 +168,32 @@ async function readJson(request) {
 
 async function handleSimpleDailyCheckin(request, env) {
   const url = new URL(request.url);
-  if (request.method !== 'POST' || url.pathname !== '/v1/daily-ad/check-in') return null;
+  const isDirect = url.pathname === '/v1/daily-checkin';
+  const isLegacy = url.pathname === '/v1/daily-ad/check-in';
+  if (request.method !== 'POST' || (!isDirect && !isLegacy)) return null;
+
   const member = await currentSessionMember(request, env);
   if (!member) return json({ success:false, error:'Unauthorized' }, 401);
   try {
-    const result = await fixedDailyCheckIn(env.DB, member.userId);
-    return json({ success:true, ...result });
+    const data = await fixedDailyCheckIn(env.DB, member.userId);
+    return json({
+      success:true,
+      data,
+      // Legacy aliases are retained temporarily so old clients cannot double-award.
+      awarded:data.awarded,
+      alreadyChecked:data.alreadyChecked,
+      duplicate:data.alreadyChecked,
+      points:data.points,
+      balance:data.balance,
+      businessDate:data.date,
+      pointResult:{
+        awarded:data.awarded,
+        duplicate:data.alreadyChecked,
+        entry:data.entryId ? { id:data.entryId, delta:data.awarded ? 1 : 0, balanceAfter:data.balance } : null,
+      },
+    });
   } catch (error) {
-    console.error('Simple daily check-in failed', error);
+    console.error('Direct daily check-in failed', error);
     return json({ success:false, error:error?.message || '每日簽到失敗' }, 500);
   }
 }
