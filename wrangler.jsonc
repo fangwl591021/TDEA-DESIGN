@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tdea-design",
-  "main": "src/point-operator-entry.js",
+  "main": "src/point-stats-entry.js",
   "compatibility_date": "2026-07-17",
   "assets": {
     "directory": "./public",
