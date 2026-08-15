@@ -24,7 +24,7 @@ async function requirePointAdmin(request, env, ctx) {
   const response = await app.fetch(new Request(url, { method: 'GET', headers }), env, ctx);
   if (!response.ok) return { ok:false, status:response.status || 401 };
   const payload = await response.json().catch(() => ({}));
-  if (payload?.capabilities?.canManagePoints !== true) return { ok:false, status:403 };
+  if (payload?.capabilities?.canScanPoints !== true) return { ok:false, status:403 };
   return { ok:true, operator:payload.operator || null };
 }
 
