@@ -1,0 +1,51 @@
+name: Add point stats static link once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-point-stats-static-link-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+
+      - name: Insert point stats link into static admin pages
+        shell: python
+        run: |
+          from pathlib import Path
+
+          files = [Path('public/admin.html'), Path('public/admin/index.html')]
+          needle = '''          <button class="nav-item" data-page="points">\n            <span>◉</span> 點數規則\n          </button>'''
+          insert = needle + '''\n          <a class="nav-item" href="/admin/points/stats">\n            <span>▥</span> 點數統計\n          </a>'''
+          for path in files:
+              text = path.read_text(encoding='utf-8')
+              if 'href="/admin/points/stats"' in text:
+                  continue
+              if needle not in text:
+                  raise SystemExit(f'point rules nav target not found in {path}')
+              path.write_text(text.replace(needle, insert, 1), encoding='utf-8')
+
+      - name: Verify
+        run: |
+          grep -n '/admin/points/stats' public/admin.html
+          grep -n '/admin/points/stats' public/admin/index.html
+
+      - name: Commit
+        run: |
+          if git diff --quiet -- public/admin.html public/admin/index.html; then
+            echo 'No changes to commit.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/admin.html public/admin/index.html
+          git commit -m 'fix: add point stats link to static admin navigation'
+          git push origin HEAD:agent/full-project-transplant
