@@ -1,0 +1,43 @@
+name: Add business CRM UI once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/add-business-crm-ui-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Integrate business CRM UI
+        shell: python
+        run: |
+          from pathlib import Path
+          for name in ['public/admin.html','public/admin/index.html']:
+            path=Path(name)
+            text=path.read_text(encoding='utf-8')
+            text=text.replace('會員 CRM','商脈 CRM')
+            text=text.replace('以會員為中心查看資料、推薦關係、點數與活動紀錄。','整合註冊會員與名片收藏潛在客戶；私人收藏仍只屬於原收藏者的人脈池。')
+            if '/business-crm-ui.js' not in text:
+              text=text.replace('</body>','  <script src="/business-crm-ui.js?v=20260815-1"></script>\n</body>')
+            path.write_text(text,encoding='utf-8')
+      - name: Verify
+        run: |
+          grep -q '商脈 CRM' public/admin.html
+          grep -q '/business-crm-ui.js?v=20260815-1' public/admin.html
+          grep -q '商脈 CRM' public/admin/index.html
+          grep -q '/business-crm-ui.js?v=20260815-1' public/admin/index.html
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/admin.html public/admin/index.html
+          git commit -m 'feat: integrate business CRM UI' || exit 0
+          git push origin HEAD:agent/full-project-transplant
