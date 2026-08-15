@@ -1,0 +1,40 @@
+name: Fix point stats permission once
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-point-stats-permission-once.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Fix point stats permission capability
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/point-stats-entry.js')
+          s=p.read_text(encoding='utf-8')
+          old="payload?.capabilities?.canManagePoints !== true"
+          new="payload?.capabilities?.canScanPoints !== true"
+          if old not in s:
+            raise SystemExit('permission target not found')
+          p.write_text(s.replace(old,new,1),encoding='utf-8')
+      - name: Verify
+        run: |
+          grep -q "canScanPoints !== true" src/point-stats-entry.js
+          ! grep -q "canManagePoints !== true" src/point-stats-entry.js
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/point-stats-entry.js
+          git commit -m 'fix: use actual point operator capability for stats access'
+          git push origin HEAD:agent/full-project-transplant
