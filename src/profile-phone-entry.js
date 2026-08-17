@@ -26,9 +26,9 @@ async function diagnoseRosterBinding(env,url){
   if(!env.TDEA_WORKER?.fetch) return json({success:false,error:'TDEA_WORKER service binding missing'},503);
   const memberNo=clean(url.searchParams.get('memberNo'),80).toUpperCase();
   const name=clean(url.searchParams.get('name'),120);
-  const response=await env.TDEA_WORKER.fetch(new Request('https://tdea-roster.internal/roster.json',{headers:{accept:'application/json'}}));
+  const response=await env.TDEA_WORKER.fetch(new Request('https://tdea-roster.internal/api/roster/live',{headers:{accept:'application/json','cache-control':'no-cache'}}));
   const roster=await response.json().catch(()=>null);
-  if(!response.ok||!roster) return json({success:false,error:'service-binding roster read failed',status:response.status},502);
+  if(!response.ok||!roster) return json({success:false,error:'service-binding live roster read failed',status:response.status},502);
   const a=Array.isArray(roster.a)?roster.a:[];
   const v=Array.isArray(roster.v)?roster.v:[];
   const normalizeName=(value)=>clean(value,160).replace(/\s+/g,'').toLowerCase();
