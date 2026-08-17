@@ -11,20 +11,15 @@ export function normalizeMemberType(value) {
 
 async function loadTdeaRoster(service) {
   if (!service?.fetch) throw new Error("TDEA 會員核對服務尚未設定");
-  const paths = ["/api/roster", "/roster.json"];
-  for (const path of paths) {
-    try {
-      const response = await service.fetch(new Request(`https://tdea-roster.internal${path}`, {
-        method: "GET",
-        headers: { accept: "application/json", "cache-control": "no-cache" },
-      }));
-      const roster = await response.json().catch(() => null);
-      if (response.ok && roster && (Array.isArray(roster.a) || Array.isArray(roster.v))) return roster;
-    } catch {
-      // Try the compatibility path before reporting a read failure.
-    }
+  const response = await service.fetch(new Request("https://tdea-roster.internal/api/roster/live", {
+    method: "GET",
+    headers: { accept: "application/json", "cache-control": "no-cache" },
+  }));
+  const roster = await response.json().catch(() => null);
+  if (!response.ok || !roster || (!Array.isArray(roster.a) && !Array.isArray(roster.v))) {
+    throw new Error("TDEA 即時名冊讀取失敗");
   }
-  throw new Error("TDEA 正式名冊讀取失敗");
+  return roster;
 }
 
 export async function verifyTdeaRosterMember(service, lookupSecret, { memberType, memberNumber, fullName, phone, birthday }) {
@@ -33,7 +28,6 @@ export async function verifyTdeaRosterMember(service, lookupSecret, { memberType
   const name = clean(fullName, 120);
   if (!name) throw new Error("請填寫姓名");
 
-  // 一般會員為自行註冊，不需要也不允許走協會／廠商正式名冊核對。
   if (type === "general") {
     return {
       memberType: "general",
@@ -78,7 +72,7 @@ export async function lookupTdeaRosterMemberNumber(service, lookupSecret, { memb
   if (!match?.[0]) throw new Error("查無符合的會員資料，請直接輸入會員編號");
   return {
     memberType: type,
-    memberNumber: normalizeMemberNumber(match[0]),
+    memberNumber: clean(match[0], 80).toUpperCase(),
     rosterName: type === "vendor" ? clean(match?.[1] || match?.[4] || match?.[3], 120) : clean(match?.[2], 120),
     source: "tdea_roster",
   };
