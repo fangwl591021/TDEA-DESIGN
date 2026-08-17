@@ -1,0 +1,38 @@
+name: Add roster claim guard once
+on:
+  push:
+    branches: [agent/full-project-transplant]
+    paths: ['.github/workflows/add-roster-claim-guard-once.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Add unique roster claim guard
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('src/member-repository.js')
+          s=p.read_text()
+          old='''  const phoneOwner = await db.prepare(`\n    SELECT mp.platform_user_id\n    FROM member_profiles mp\n    JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'\n    WHERE mp.phone = ? AND mp.platform_user_id <> ?\n    LIMIT 1\n  `).bind(phone, userId).first();\n  if (phoneOwner) throw new Error('此行動電話已由其他會員使用');\n  await db.prepare(`'''
+          new='''  const phoneOwner = await db.prepare(`\n    SELECT mp.platform_user_id\n    FROM member_profiles mp\n    JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'\n    WHERE mp.phone = ? AND mp.platform_user_id <> ?\n    LIMIT 1\n  `).bind(phone, userId).first();\n  if (phoneOwner) throw new Error('此行動電話已由其他會員使用');\n  if (memberType !== 'general' && rosterMemberNumber) {\n    const rosterOwner = await db.prepare(`\n      SELECT mp.platform_user_id\n      FROM member_profiles mp\n      JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'\n      WHERE mp.member_type = ? AND UPPER(mp.roster_member_number) = UPPER(?) AND mp.platform_user_id <> ?\n      LIMIT 1\n    `).bind(memberType, rosterMemberNumber, userId).first();\n    if (rosterOwner) throw new Error('此會員編號已完成 LINE 身分綁定，如需更換 LINE 帳號，請聯絡管理員協助。');\n  }\n  await db.prepare(`'''
+          if old not in s:
+              raise SystemExit('target block not found')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Verify
+        run: |
+          grep -q '此會員編號已完成 LINE 身分綁定' src/member-repository.js
+          node --check src/member-repository.js
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/member-repository.js
+          git commit -m 'fix: prevent roster member identity takeover'
+          git push origin HEAD:agent/full-project-transplant
