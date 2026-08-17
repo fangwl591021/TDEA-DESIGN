@@ -22,9 +22,43 @@ async function syncRosterPhone(env, profile){
   return {synced:true,record:result.record||null};
 }
 
+async function diagnoseRosterBinding(env,url){
+  if(!env.TDEA_WORKER?.fetch) return json({success:false,error:'TDEA_WORKER service binding missing'},503);
+  const memberNo=clean(url.searchParams.get('memberNo'),80).toUpperCase();
+  const name=clean(url.searchParams.get('name'),120);
+  const response=await env.TDEA_WORKER.fetch(new Request('https://tdea-roster.internal/roster.json',{headers:{accept:'application/json'}}));
+  const roster=await response.json().catch(()=>null);
+  if(!response.ok||!roster) return json({success:false,error:'service-binding roster read failed',status:response.status},502);
+  const a=Array.isArray(roster.a)?roster.a:[];
+  const v=Array.isArray(roster.v)?roster.v:[];
+  const normalizeName=(value)=>clean(value,160).replace(/\s+/g,'').toLowerCase();
+  const byNo=(row)=>memberNo&&clean(row?.[0],80).toUpperCase()===memberNo;
+  const byNameAssociation=(row)=>name&&normalizeName(row?.[2])===normalizeName(name);
+  const byNameVendor=(row)=>name&&normalizeName(row?.[1]||row?.[4]||row?.[3])===normalizeName(name);
+  const assoc=a.find(row=>byNo(row)||byNameAssociation(row));
+  const vendor=v.find(row=>byNo(row)||byNameVendor(row));
+  const match=assoc||vendor||null;
+  return json({
+    success:true,
+    serviceBindingOk:true,
+    liveManagerRosterMerged:Boolean(roster.liveManagerRosterMerged),
+    memberNo,
+    name,
+    found:Boolean(match),
+    type:assoc?'association':vendor?'vendor':'',
+    matchedMemberNo:match?clean(match[0],80).toUpperCase():'',
+    matchedName:assoc?clean(assoc?.[2],120):vendor?clean(vendor?.[1]||vendor?.[4]||vendor?.[3],120):'',
+    associationCount:a.length,
+    vendorCount:v.length,
+  });
+}
+
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
+    if(request.method==='GET'&&url.pathname==='/internal/roster-diagnose'){
+      try{return await diagnoseRosterBinding(env,url);}catch(error){return json({success:false,error:error?.message||String(error)},500);}
+    }
     if(request.method==='PATCH'&&url.pathname==='/v1/me'){
       const profile=await request.clone().json().catch(()=>({}));
       const response=await app.fetch(request,env,ctx);
