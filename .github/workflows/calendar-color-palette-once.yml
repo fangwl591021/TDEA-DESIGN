@@ -1,0 +1,37 @@
+name: Calendar color palette once
+on:
+  push:
+    branches: [agent/full-project-transplant]
+    paths: ['.github/workflows/calendar-color-palette-once.yml']
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Replace HEX prompt with palette
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('public/app-20260803-123.js')
+          s=p.read_text()
+          old='''async function createCalendarLabelPrompt(suggestedName = "") {\n  const initial = typeof suggestedName === "string" ? suggestedName : "";\n  const name = prompt("建立行事曆標籤，例如：工作、家庭、約訪、學習", initial);\n  if (!name?.trim()) return null;\n  const cleanName = name.trim();\n  const suggestedColors = { "工作":"#345bdb", "家庭":"#d49121", "約訪":"#b65d79", "學習":"#8246ee" };\n  const current = state.calendarLabels.find((label) => label.sourceType === "custom" && label.name.trim().toLocaleLowerCase("zh-TW") === cleanName.toLocaleLowerCase("zh-TW"));\n  const color = prompt("標籤顏色（HEX 色碼）", current?.color || suggestedColors[cleanName] || "#52637d") || current?.color || "#52637d";\n  const result = await api("/v1/personal-calendar/labels", { method:"POST", body:JSON.stringify({ name:cleanName, color }) });'''
+          new='''function pickCalendarLabelColor(initialColor = "#52637d") {\n  return new Promise((resolve) => {\n    document.querySelector(".calendar-color-picker-dialog")?.remove();\n    const palette = ["#345bdb","#0f9d58","#d49121","#e05a47","#b65d79","#8246ee","#00a6a6","#52637d","#8b6b4a","#2f7d8c","#cf4f7c","#6f42c1"];\n    let selected = /^#[0-9a-f]{6}$/i.test(initialColor) ? initialColor : "#52637d";\n    const dialog = document.createElement("div");\n    dialog.className = "calendar-color-picker-dialog";\n    dialog.innerHTML = `<div class="calendar-color-picker-backdrop"></div><section class="calendar-color-picker-card" role="dialog" aria-modal="true" aria-labelledby="calendarColorPickerTitle"><h3 id="calendarColorPickerTitle">選擇標籤顏色</h3><p>點選喜歡的顏色即可，不需要輸入色碼。</p><div class="calendar-color-swatches">${palette.map((color)=>`<button type="button" class="calendar-color-swatch" data-calendar-color="${color}" aria-label="選擇顏色" style="--swatch:${color}"></button>`).join("")}</div><label class="calendar-custom-color"><span>自訂顏色</span><input type="color" value="${selected}"></label><div class="calendar-color-picker-actions"><button type="button" data-calendar-color-cancel>取消</button><button type="button" class="primary" data-calendar-color-apply>套用</button></div></section>`;\n    document.body.appendChild(dialog);\n    const styleId = "calendar-color-picker-style";\n    if (!document.getElementById(styleId)) {\n      const style = document.createElement("style");\n      style.id = styleId;\n      style.textContent = `.calendar-color-picker-dialog{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:24px}.calendar-color-picker-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.44);backdrop-filter:blur(5px)}.calendar-color-picker-card{position:relative;width:min(360px,100%);background:#fff;border-radius:24px;padding:24px;box-shadow:0 20px 60px rgba(15,23,42,.22);color:#17233b}.calendar-color-picker-card h3{margin:0 0 6px;font-size:22px}.calendar-color-picker-card p{margin:0 0 18px;color:#6b7280;line-height:1.6}.calendar-color-swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px}.calendar-color-swatch{width:42px;height:42px;border:3px solid #fff;border-radius:50%;background:var(--swatch);box-shadow:0 0 0 1px #d8dee9;cursor:pointer}.calendar-color-swatch.active{box-shadow:0 0 0 3px #111827;transform:scale(1.06)}.calendar-custom-color{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid #dde3ed;border-radius:14px}.calendar-custom-color input{width:56px;height:40px;border:0;background:none;padding:0}.calendar-color-picker-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}.calendar-color-picker-actions button{height:46px;border:0;border-radius:14px;background:#eef2f7;font-weight:700}.calendar-color-picker-actions .primary{background:#b95121;color:#fff}`;\n      document.head.appendChild(style);\n    }\n    const refresh = () => dialog.querySelectorAll("[data-calendar-color]").forEach((button)=>button.classList.toggle("active", button.dataset.calendarColor.toLowerCase() === selected.toLowerCase()));\n    refresh();\n    dialog.querySelectorAll("[data-calendar-color]").forEach((button)=>button.onclick=()=>{ selected=button.dataset.calendarColor; dialog.querySelector("input[type=color]").value=selected; refresh(); });\n    dialog.querySelector("input[type=color]").oninput=(event)=>{ selected=event.target.value; refresh(); };\n    const finish=(value)=>{ dialog.remove(); resolve(value); };\n    dialog.querySelector("[data-calendar-color-cancel]").onclick=()=>finish(null);\n    dialog.querySelector(".calendar-color-picker-backdrop").onclick=()=>finish(null);\n    dialog.querySelector("[data-calendar-color-apply]").onclick=()=>finish(selected);\n  });\n}\nasync function createCalendarLabelPrompt(suggestedName = "") {\n  const initial = typeof suggestedName === "string" ? suggestedName : "";\n  const name = prompt("建立行事曆標籤，例如：工作、家庭、約訪、學習", initial);\n  if (!name?.trim()) return null;\n  const cleanName = name.trim();\n  const suggestedColors = { "工作":"#345bdb", "家庭":"#d49121", "約訪":"#b65d79", "學習":"#8246ee" };\n  const current = state.calendarLabels.find((label) => label.sourceType === "custom" && label.name.trim().toLocaleLowerCase("zh-TW") === cleanName.toLocaleLowerCase("zh-TW"));\n  const color = await pickCalendarLabelColor(current?.color || suggestedColors[cleanName] || "#52637d");\n  if (!color) return null;\n  const result = await api("/v1/personal-calendar/labels", { method:"POST", body:JSON.stringify({ name:cleanName, color }) });'''
+          if old not in s:
+              raise SystemExit('target block not found')
+          p.write_text(s.replace(old,new))
+          PY
+      - name: Verify
+        run: |
+          grep -q 'pickCalendarLabelColor' public/app-20260803-123.js
+          ! grep -q '標籤顏色（HEX 色碼）' public/app-20260803-123.js
+          node --check public/app-20260803-123.js
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/app-20260803-123.js
+          git commit -m 'ui: replace calendar label HEX prompt with color palette'
+          git push origin HEAD:agent/full-project-transplant
