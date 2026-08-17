@@ -1,0 +1,42 @@
+name: Fix card import status machine once
+on:
+  push:
+    branches: [agent/full-project-transplant]
+    paths: ['.github/workflows/fix-card-import-status-machine-once.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+      - name: Fix illegal card_import_events statuses
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('src/card-collection.js')
+          s=p.read_text()
+          replacements={
+            "UPDATE card_import_events SET status='verification_processing',updated_at=CURRENT_TIMESTAMP WHERE id=?": "UPDATE card_import_events SET ocr_json=json_set(CASE WHEN json_valid(ocr_json) THEN ocr_json ELSE '{}' END,'$._verificationStatus','processing'),updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            "UPDATE card_import_events SET status='verification_queued',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?": "UPDATE card_import_events SET ocr_json=json_set(CASE WHEN json_valid(ocr_json) THEN ocr_json ELSE '{}' END,'$._verificationStatus','queued'),updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?",
+            "AND cie.status NOT IN ('verification_queued','verification_processing')": "AND COALESCE(json_extract(CASE WHEN json_valid(cie.ocr_json) THEN cie.ocr_json ELSE '{}' END,'$._verificationStatus'),'') NOT IN ('queued','processing')",
+            "UPDATE card_import_events SET status='duplicate',contact_card_id=?,front_r2_key='',back_r2_key='',updated_at=CURRENT_TIMESTAMP WHERE id=?": "UPDATE card_import_events SET status='updated',contact_card_id=?,front_r2_key='',back_r2_key='',updated_at=CURRENT_TIMESTAMP WHERE id=?",
+          }
+          for old,new in replacements.items():
+            if old not in s:
+              raise SystemExit(f'missing expected text: {old}')
+            s=s.replace(old,new)
+          p.write_text(s)
+      - name: Verify no illegal status writes remain
+        run: |
+          ! grep -n "status='verification_queued'\|status='verification_processing'\|status='duplicate'" src/card-collection.js
+          grep -n "_verificationStatus" src/card-collection.js
+      - name: Commit
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add src/card-collection.js
+          git commit -m "fix: separate card verification state from import status"
+          git push origin HEAD:agent/full-project-transplant
