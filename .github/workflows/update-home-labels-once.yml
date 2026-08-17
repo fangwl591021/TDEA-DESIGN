@@ -1,0 +1,50 @@
+name: Update home labels once
+on:
+  push:
+    branches: [agent/full-project-transplant]
+    paths: ['.github/workflows/update-home-labels-once.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+      - name: Update point and fortune labels
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('public/app-20260803-123.js')
+          s=p.read_text()
+          old='<strong>${format(wallet.balance)}</strong><span>點</span>'
+          new='<span>點數專區</span>'
+          if old not in s:
+              raise SystemExit('point label target not found')
+          s=s.replace(old,new,1)
+          old2='<button type="button" class="ak-destiny-card" data-home-action="zodiacPopup" aria-label="開啟星座命理">'
+          new2='<button type="button" class="ak-destiny-card" data-home-action="zodiacPopup" aria-label="開啟運勢">'
+          if old2 not in s:
+              raise SystemExit('destiny aria target not found')
+          s=s.replace(old2,new2,1)
+          old3='<span>星座命理</span></button>'
+          new3='<span>運勢</span></button>'
+          if old3 not in s:
+              raise SystemExit('destiny label target not found')
+          s=s.replace(old3,new3,1)
+          p.write_text(s)
+          PY
+      - name: Verify
+        run: |
+          grep -q '點數專區' public/app-20260803-123.js
+          grep -q '<span>運勢</span>' public/app-20260803-123.js
+          ! grep -q '<strong>${format(wallet.balance)}</strong><span>點</span>' public/app-20260803-123.js
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/app-20260803-123.js
+          git commit -m 'ui: hide point balance and rename fortune entry' || exit 0
+          git push origin HEAD:agent/full-project-transplant
