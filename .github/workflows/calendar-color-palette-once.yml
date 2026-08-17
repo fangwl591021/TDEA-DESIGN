@@ -1,4 +1,6 @@
 name: Calendar color palette once
+permissions:
+  contents: write
 on:
   push:
     branches: [agent/full-project-transplant]
