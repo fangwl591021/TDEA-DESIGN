@@ -1,0 +1,39 @@
+name: Update card scan copy once
+on:
+  push:
+    paths:
+      - '.github/workflows/update-card-scan-copy-once.yml'
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+      - name: Update scan promo copy
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p=Path('public/app-20260803-123.js')
+          s=p.read_text()
+          old='選擇照片後先裁切名片範圍，再上傳做 OCR 分析並建立 CRM 檔案；每張新名片贈 10 K點，相同名片不得重複上傳或領點。'
+          new='一拍即建檔，把名片變成可搜尋、可追蹤、可經營的人脈資產。'
+          if old not in s:
+              raise SystemExit('target copy not found')
+          p.write_text(s.replace(old,new,1))
+          PY
+      - name: Verify
+        run: |
+          grep -F '一拍即建檔，把名片變成可搜尋、可追蹤、可經營的人脈資產。' public/app-20260803-123.js
+          ! grep -F '每張新名片贈 10 K點，相同名片不得重複上傳或領點。' public/app-20260803-123.js
+      - name: Commit
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public/app-20260803-123.js
+          git commit -m 'ui: update card scan promotional copy'
+          git push origin HEAD:agent/full-project-transplant
