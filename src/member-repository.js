@@ -344,6 +344,16 @@ export async function updateMemberProfile(db, userId, profile, rosterVerificatio
     LIMIT 1
   `).bind(phone, userId).first();
   if (phoneOwner) throw new Error('此行動電話已由其他會員使用');
+  if (memberType !== 'general' && rosterMemberNumber) {
+    const rosterOwner = await db.prepare(`
+      SELECT mp.platform_user_id
+      FROM member_profiles mp
+      JOIN platform_users pu ON pu.id = mp.platform_user_id AND pu.status = 'active'
+      WHERE mp.member_type = ? AND UPPER(mp.roster_member_number) = UPPER(?) AND mp.platform_user_id <> ?
+      LIMIT 1
+    `).bind(memberType, rosterMemberNumber, userId).first();
+    if (rosterOwner) throw new Error('此會員編號已完成 LINE 身分綁定，如需更換 LINE 帳號，請聯絡管理員協助。');
+  }
   await db.prepare(`
     UPDATE member_profiles SET display_name = ?, full_name = ?, phone = ?, gender = ?, birthday = ?, company_member_number = ?, member_type = ?, roster_member_number = ?, roster_verified_name = ?, roster_verified_at = CURRENT_TIMESTAMP, roster_source = ?, line_url = ?, social_links_json = ?, profile_completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
     WHERE platform_user_id = ?
