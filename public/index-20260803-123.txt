@@ -8,5 +8,5 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="/vendor/cropper.min.js"></script>
 </head>
-<body><main id="app"><section id="loading" class="center">載入會員中心…</section></main><script src="/tdea-notice.js?v=20260815-1"></script><script src="/default-activity-tab.js?v=20260815-1"></script><script src="/daily-checkin-direct.js?v=20260815-2"></script><script type="module" src="/app-20260803-123.js?v=20260814-146"></script><script src="/point-operator-scan.js?v=20260814-4" defer></script><script src="/point-balance-sync.js?v=20260814-1" defer></script><script src="/wallet-qr-10m.js?v=20260814-1" defer></script></body>
+<body><main id="app"><section id="loading" class="center">載入會員中心…</section></main><script src="/tdea-notice.js?v=20260815-1"></script><script src="/default-activity-tab.js?v=20260815-1"></script><script src="/daily-checkin-direct.js?v=20260815-2"></script><script src="/member-phone-editable.js?v=20260817-1"></script><script type="module" src="/app-20260803-123.js?v=20260814-146"></script><script src="/point-operator-scan.js?v=20260814-4" defer></script><script src="/point-balance-sync.js?v=20260814-1" defer></script><script src="/wallet-qr-10m.js?v=20260814-1" defer></script></body>
 </html>
