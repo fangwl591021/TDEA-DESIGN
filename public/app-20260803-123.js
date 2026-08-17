@@ -731,6 +731,32 @@ async function setCalendarLabelVisible(label, visible) {
   label.visible = visible;
   renderPersonalCalendarView();
 }
+function pickCalendarLabelColor(initialColor = "#52637d") {
+  return new Promise((resolve) => {
+    document.querySelector(".calendar-color-picker-dialog")?.remove();
+    const palette = ["#345bdb","#0f9d58","#d49121","#e05a47","#b65d79","#8246ee","#00a6a6","#52637d","#8b6b4a","#2f7d8c","#cf4f7c","#6f42c1"];
+    let selected = /^#[0-9a-f]{6}$/i.test(initialColor) ? initialColor : "#52637d";
+    const dialog = document.createElement("div");
+    dialog.className = "calendar-color-picker-dialog";
+    dialog.innerHTML = `<div class="calendar-color-picker-backdrop"></div><section class="calendar-color-picker-card" role="dialog" aria-modal="true" aria-labelledby="calendarColorPickerTitle"><h3 id="calendarColorPickerTitle">選擇標籤顏色</h3><p>點選喜歡的顏色即可，不需要輸入色碼。</p><div class="calendar-color-swatches">${palette.map((color)=>`<button type="button" class="calendar-color-swatch" data-calendar-color="${color}" aria-label="選擇顏色" style="--swatch:${color}"></button>`).join("")}</div><label class="calendar-custom-color"><span>自訂顏色</span><input type="color" value="${selected}"></label><div class="calendar-color-picker-actions"><button type="button" data-calendar-color-cancel>取消</button><button type="button" class="primary" data-calendar-color-apply>套用</button></div></section>`;
+    document.body.appendChild(dialog);
+    const styleId = "calendar-color-picker-style";
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement("style");
+      style.id = styleId;
+      style.textContent = `.calendar-color-picker-dialog{position:fixed;inset:0;z-index:10050;display:grid;place-items:center;padding:24px}.calendar-color-picker-backdrop{position:absolute;inset:0;background:rgba(15,23,42,.44);backdrop-filter:blur(5px)}.calendar-color-picker-card{position:relative;width:min(360px,100%);background:#fff;border-radius:24px;padding:24px;box-shadow:0 20px 60px rgba(15,23,42,.22);color:#17233b}.calendar-color-picker-card h3{margin:0 0 6px;font-size:22px}.calendar-color-picker-card p{margin:0 0 18px;color:#6b7280;line-height:1.6}.calendar-color-swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px}.calendar-color-swatch{width:42px;height:42px;border:3px solid #fff;border-radius:50%;background:var(--swatch);box-shadow:0 0 0 1px #d8dee9;cursor:pointer}.calendar-color-swatch.active{box-shadow:0 0 0 3px #111827;transform:scale(1.06)}.calendar-custom-color{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border:1px solid #dde3ed;border-radius:14px}.calendar-custom-color input{width:56px;height:40px;border:0;background:none;padding:0}.calendar-color-picker-actions{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:20px}.calendar-color-picker-actions button{height:46px;border:0;border-radius:14px;background:#eef2f7;font-weight:700}.calendar-color-picker-actions .primary{background:#b95121;color:#fff}`;
+      document.head.appendChild(style);
+    }
+    const refresh = () => dialog.querySelectorAll("[data-calendar-color]").forEach((button)=>button.classList.toggle("active", button.dataset.calendarColor.toLowerCase() === selected.toLowerCase()));
+    refresh();
+    dialog.querySelectorAll("[data-calendar-color]").forEach((button)=>button.onclick=()=>{ selected=button.dataset.calendarColor; dialog.querySelector("input[type=color]").value=selected; refresh(); });
+    dialog.querySelector("input[type=color]").oninput=(event)=>{ selected=event.target.value; refresh(); };
+    const finish=(value)=>{ dialog.remove(); resolve(value); };
+    dialog.querySelector("[data-calendar-color-cancel]").onclick=()=>finish(null);
+    dialog.querySelector(".calendar-color-picker-backdrop").onclick=()=>finish(null);
+    dialog.querySelector("[data-calendar-color-apply]").onclick=()=>finish(selected);
+  });
+}
 async function createCalendarLabelPrompt(suggestedName = "") {
   const initial = typeof suggestedName === "string" ? suggestedName : "";
   const name = prompt("建立行事曆標籤，例如：工作、家庭、約訪、學習", initial);
@@ -738,7 +764,8 @@ async function createCalendarLabelPrompt(suggestedName = "") {
   const cleanName = name.trim();
   const suggestedColors = { "工作":"#345bdb", "家庭":"#d49121", "約訪":"#b65d79", "學習":"#8246ee" };
   const current = state.calendarLabels.find((label) => label.sourceType === "custom" && label.name.trim().toLocaleLowerCase("zh-TW") === cleanName.toLocaleLowerCase("zh-TW"));
-  const color = prompt("標籤顏色（HEX 色碼）", current?.color || suggestedColors[cleanName] || "#52637d") || current?.color || "#52637d";
+  const color = await pickCalendarLabelColor(current?.color || suggestedColors[cleanName] || "#52637d");
+  if (!color) return null;
   const result = await api("/v1/personal-calendar/labels", { method:"POST", body:JSON.stringify({ name:cleanName, color }) });
   if (!result.label) return null;
   const existingIndex = state.calendarLabels.findIndex((label) => label.id === result.label.id);
