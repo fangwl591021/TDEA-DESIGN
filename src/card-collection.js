@@ -457,7 +457,7 @@ export async function processImportInBackground(db, bucket, userId, eventId, api
       await Promise.all([event.front_r2_key,event.back_r2_key].filter(Boolean).map((key)=>bucket.delete(key)));
       await db.batch([
         db.prepare("UPDATE contact_cards SET status='archived',front_r2_key='',updated_at=CURRENT_TIMESTAMP WHERE id=? AND scanner_user_id=?").bind(contact.id,userId),
-        db.prepare("UPDATE card_import_events SET status='duplicate',contact_card_id=?,front_r2_key='',back_r2_key='',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(duplicate.id,eventId),
+        db.prepare("UPDATE card_import_events SET status='updated',contact_card_id=?,front_r2_key='',back_r2_key='',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(duplicate.id,eventId),
       ]);
       await updateCardImportFingerprint(db,eventId,'duplicate');
       return {created:false,duplicate:true,card:rowToCard(duplicate)};
@@ -499,7 +499,7 @@ export async function reverifyContactFromSource(db,bucket,userId,id,apiKey,model
     FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
     WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''`).bind(id,userId).first();
   if(!row)throw new Error('這張名片沒有可供重新辨識的原始圖片');
-  await db.prepare("UPDATE card_import_events SET status='verification_processing',updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.source_event_id).run();
+  await db.prepare("UPDATE card_import_events SET ocr_json=json_set(CASE WHEN json_valid(ocr_json) THEN ocr_json ELSE '{}' END,'$._verificationStatus','processing'),updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.source_event_id).run();
   try{
     const images=[];
     for(const key of [row.import_front_key,row.import_back_key].filter(Boolean)){
@@ -529,7 +529,7 @@ export async function queueContactCardReverification(db,userId,id) {
   const row=await db.prepare(`SELECT cc.id FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
     WHERE cc.id=? AND cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''`).bind(id,userId).first();
   if(!row)return false;
-  await db.prepare("UPDATE card_import_events SET status='verification_queued',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(id).run();
+  await db.prepare("UPDATE card_import_events SET ocr_json=json_set(CASE WHEN json_valid(ocr_json) THEN ocr_json ELSE '{}' END,'$._verificationStatus','queued'),updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(id).run();
   return true;
 }
 export async function queueMemberCardVerificationBackfill(db,userId,limit=1) {
@@ -538,10 +538,10 @@ export async function queueMemberCardVerificationBackfill(db,userId,limit=1) {
     FROM contact_cards cc JOIN card_import_events cie ON cie.id=cc.source_event_id
     WHERE cc.scanner_user_id=? AND cc.status='active' AND cie.front_r2_key!=''
       AND COALESCE(json_extract(cie.ocr_json,'$.verificationVersion'),'')!=?
-      AND cie.status NOT IN ('verification_queued','verification_processing')
+      AND COALESCE(json_extract(CASE WHEN json_valid(cie.ocr_json) THEN cie.ocr_json ELSE '{}' END,'$._verificationStatus'),'') NOT IN ('queued','processing')
     ORDER BY cie.updated_at ASC LIMIT ?`).bind(userId,OCR_VERIFICATION_VERSION,capped).all();
   const rows=result.results || [];
-  if(rows.length)await db.batch(rows.map((row)=>db.prepare("UPDATE card_import_events SET status='verification_queued',updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(row.id)));
+  if(rows.length)await db.batch(rows.map((row)=>db.prepare("UPDATE card_import_events SET ocr_json=json_set(CASE WHEN json_valid(ocr_json) THEN ocr_json ELSE '{}' END,'$._verificationStatus','queued'),updated_at=CURRENT_TIMESTAMP WHERE contact_card_id=?").bind(row.id)));
   return rows.map((row)=>({id:row.id,userId:row.scanner_user_id}));
 }
 export async function queueLegacyFailedImportRetries(db, limit = 3) {
