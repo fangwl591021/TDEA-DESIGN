@@ -1326,9 +1326,9 @@ async function home() {
         </button>
       </div>
       <div class="ak-member-actions">
-        <button type="button" class="ak-point-card" data-home-action="wallet" aria-label="開啟有點開心點數錢包"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m12 7 1.4 2.9 3.1.4-2.3 2.2.6 3.2-2.8-1.5-2.8 1.5.6-3.2-2.3-2.2 3.1-.4z"/></svg><strong>${format(wallet.balance)}</strong><span>點</span></button>
+        <button type="button" class="ak-point-card" data-home-action="wallet" aria-label="開啟有點開心點數錢包"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m12 7 1.4 2.9 3.1.4-2.3 2.2.6 3.2-2.8-1.5-2.8 1.5.6-3.2-2.3-2.2 3.1-.4z"/></svg><span>點數專區</span></button>
         <button type="button" class="ak-profile-card" data-home-action="profile" aria-label="開啟我的會員資料"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c.7-4.3 3-6.5 7-6.5s6.3 2.2 7 6.5"/></svg><span>我的</span></button>
-        <button type="button" class="ak-destiny-card" data-home-action="zodiacPopup" aria-label="開啟星座命理"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.8 1.1 3.2 3.3.1-2.6 2 1 3.2-2.8-1.9-2.8 1.9 1-3.2-2.6-2 3.3-.1z"/><path d="M18.4 14.4a3.8 3.8 0 1 1-4.8 4.8 4.6 4.6 0 0 0 4.8-4.8Z"/></svg><span>星座命理</span></button>
+        <button type="button" class="ak-destiny-card" data-home-action="zodiacPopup" aria-label="開啟運勢"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3.8 1.1 3.2 3.3.1-2.6 2 1 3.2-2.8-1.9-2.8 1.9 1-3.2-2.6-2 3.3-.1z"/><path d="M18.4 14.4a3.8 3.8 0 1 1-4.8 4.8 4.6 4.6 0 0 0 4.8-4.8Z"/></svg><span>運勢</span></button>
         <button type="button" class="ak-qr-card" data-home-action="share" aria-label="開啟專屬分享 QR 碼"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM15 14h2v2h-2zM19 14h2v4h-2zM14 18h3v3h-3zM19 20h2v1h-2z"/></svg><span>專屬分享</span></button>
       </div>
     </header>
