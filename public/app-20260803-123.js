@@ -2619,7 +2619,6 @@ function bindScanInputs() {
       const upload=await fetch("/v1/card-collection/imports",{method:"POST",headers:{authorization:`Bearer ${state.token}`},body:form});const uploaded=await upload.json();if(!upload.ok)throw new Error(uploaded.error||"名片上傳失敗");
       const submitted=await api(`/v1/card-collection/imports/${encodeURIComponent(uploaded.import.id)}/submit`,{method:"POST",body:"{}"});
       collectionScanFiles=[]; await cardCollection();
-      if(submitted.reward?.status==="pending_validation")alert("名片辨識完成並確認不是重複收藏後，將自動贈送 10 K點。");
     },{busy:"送出中…",success:"已送出，AI 分析中"}); } catch(error){alert(error.message);}
   };
 }
