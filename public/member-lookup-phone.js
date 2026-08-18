@@ -2,9 +2,8 @@
   const esc = (value) => String(value ?? "").replace(/[&<>"']/g, (ch) => ({
     "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
   })[ch]);
-  const normalizePhone = (value) => String(value || "").replace(/[^\d+]/g, "");
 
-  async function lookup(memberType, fullName, phone = "") {
+  async function lookup(memberType, fullName) {
     const token = localStorage.getItem("klinkweb_session") || "";
     const response = await fetch("/v1/roster/member-number-lookup", {
       method: "POST",
@@ -13,7 +12,7 @@
         "content-type": "application/json",
         ...(token ? { authorization: `Bearer ${token}` } : {})
       },
-      body: JSON.stringify({ memberType, fullName, phone })
+      body: JSON.stringify({ memberType, fullName })
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -24,6 +23,36 @@
     return payload;
   }
 
+  function applyCandidate(candidate, modal) {
+    const nameTarget = document.querySelector("#fullName");
+    const phoneTarget = document.querySelector("#phone");
+    const numberTarget = document.querySelector("#rosterMemberNumber");
+    if (nameTarget && candidate.rosterName) nameTarget.value = candidate.rosterName;
+    if (phoneTarget && candidate.phone) phoneTarget.value = candidate.phone;
+    if (numberTarget) numberTarget.value = candidate.memberNumber || "";
+    modal.remove();
+  }
+
+  function renderCandidates(result, candidates, modal) {
+    result.innerHTML = `
+      <p style="margin:8px 0 12px">找到 ${candidates.length} 筆相符資料，請點選正確會員：</p>
+      <div style="display:grid;gap:10px">
+        ${candidates.map((item, index) => `
+          <button type="button" data-roster-candidate="${index}" style="width:100%;text-align:left;padding:12px 14px;border:1px solid #e6c7b8;border-radius:12px;background:#fff;color:#4a2c20;cursor:pointer">
+            <strong style="display:block;font-size:17px">${esc(item.rosterName || "未命名")}</strong>
+            <span style="display:block;margin-top:4px">行動電話：${esc(item.phone || "未填")}</span>
+            <span style="display:block;margin-top:2px;color:#8a6758">會員編號：${esc(item.memberNumber || "")}</span>
+          </button>
+        `).join("")}
+      </div>`;
+    result.querySelectorAll("[data-roster-candidate]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const candidate = candidates[Number(button.dataset.rosterCandidate)];
+        if (candidate) applyCandidate(candidate, modal);
+      });
+    });
+  }
+
   function openLookup() {
     const memberType = document.querySelector("#memberType")?.value || "";
     if (!["association", "vendor"].includes(memberType)) {
@@ -32,10 +61,9 @@
     }
     document.querySelector(".ak-roster-lookup-dialog")?.remove();
     const currentName = document.querySelector("#fullName")?.value || "";
-    const currentPhone = document.querySelector("#phone")?.value || "";
     const modal = document.createElement("div");
     modal.className = "ak-roster-lookup-dialog";
-    modal.innerHTML = `<div class="ak-roster-lookup-backdrop"></div><section class="ak-roster-lookup-sheet" role="dialog" aria-modal="true" aria-labelledby="rosterLookupTitle"><button type="button" class="ak-roster-lookup-close" aria-label="關閉">×</button><h2 id="rosterLookupTitle">會員編號查詢</h2><p>輸入姓名／公司名稱，從 TDEA ${memberType === "vendor" ? "廠商" : "協會"}名冊查詢會員編號。</p><label>姓名／公司名稱<input id="rosterLookupName" maxlength="120" autocomplete="name" value="${esc(currentName)}"></label><label id="rosterLookupPhoneWrap" hidden>行動電話<input id="rosterLookupPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="20" placeholder="0912345678" value="${esc(currentPhone)}"></label><button type="button" class="btn" id="rosterLookupSearch">查詢</button><div id="rosterLookupResult" class="ak-roster-lookup-result" aria-live="polite"></div></section>`;
+    modal.innerHTML = `<div class="ak-roster-lookup-backdrop"></div><section class="ak-roster-lookup-sheet" role="dialog" aria-modal="true" aria-labelledby="rosterLookupTitle"><button type="button" class="ak-roster-lookup-close" aria-label="關閉">×</button><h2 id="rosterLookupTitle">會員編號查詢</h2><p>輸入姓名／公司名稱，從 TDEA ${memberType === "vendor" ? "廠商" : "協會"}名冊查詢會員編號。</p><label>姓名／公司名稱<input id="rosterLookupName" maxlength="120" autocomplete="name" value="${esc(currentName)}"></label><button type="button" class="btn" id="rosterLookupSearch">查詢</button><div id="rosterLookupResult" class="ak-roster-lookup-result" aria-live="polite"></div></section>`;
     const close = () => modal.remove();
     modal.querySelector(".ak-roster-lookup-backdrop")?.addEventListener("click", close);
     modal.querySelector(".ak-roster-lookup-close")?.addEventListener("click", close);
@@ -43,38 +71,27 @@
 
     const search = async () => {
       const name = modal.querySelector("#rosterLookupName")?.value.trim() || "";
-      const phoneWrap = modal.querySelector("#rosterLookupPhoneWrap");
-      const phoneInput = modal.querySelector("#rosterLookupPhone");
       const result = modal.querySelector("#rosterLookupResult");
       const button = modal.querySelector("#rosterLookupSearch");
       if (!name) { result.textContent = "請輸入姓名／公司名稱"; return; }
-      const phoneRequired = !phoneWrap.hidden;
-      const phone = phoneRequired ? normalizePhone(phoneInput.value) : "";
-      if (phoneRequired && !/^(?:\+886|0)9\d{8}$/.test(phone)) {
-        result.textContent = "找到同名會員，請輸入正確的行動電話確認";
-        phoneInput.focus();
-        return;
-      }
       button.disabled = true;
       button.textContent = "查詢中…";
       try {
-        const response = await lookup(memberType, name, phone);
+        const response = await lookup(memberType, name);
         const match = response.match || {};
-        result.innerHTML = `<p>查詢結果：${esc(match.rosterName || name)}</p><div><strong>${esc(match.memberNumber || "")}</strong><button type="button" class="btn alt" id="copyRosterMemberNumber">複製編號</button></div>`;
-        modal.querySelector("#copyRosterMemberNumber")?.addEventListener("click", async () => {
-          try { await navigator.clipboard.writeText(match.memberNumber || ""); } catch (_) {}
-          const target = document.querySelector("#rosterMemberNumber");
-          if (target) target.value = match.memberNumber || "";
-          modal.querySelector("#copyRosterMemberNumber").textContent = "已複製";
-        });
-      } catch (error) {
-        if (Number(error.status) === 409) {
-          phoneWrap.hidden = false;
-          result.textContent = "找到同名會員，請再輸入行動電話確認。";
-          phoneInput.focus();
-        } else {
-          result.textContent = error.message || "會員編號查詢失敗";
+        if (match.ambiguous && Array.isArray(match.candidates) && match.candidates.length) {
+          renderCandidates(result, match.candidates, modal);
+          return;
         }
+        const candidate = {
+          rosterName: match.rosterName || name,
+          phone: match.phone || "",
+          memberNumber: match.memberNumber || ""
+        };
+        result.innerHTML = `<p>查詢結果：</p><button type="button" id="selectRosterMember" style="width:100%;text-align:left;padding:12px 14px;border:1px solid #e6c7b8;border-radius:12px;background:#fff;color:#4a2c20;cursor:pointer"><strong style="display:block;font-size:17px">${esc(candidate.rosterName)}</strong><span style="display:block;margin-top:4px">行動電話：${esc(candidate.phone || "未填")}</span><span style="display:block;margin-top:2px;color:#8a6758">會員編號：${esc(candidate.memberNumber)}</span></button>`;
+        modal.querySelector("#selectRosterMember")?.addEventListener("click", () => applyCandidate(candidate, modal));
+      } catch (error) {
+        result.textContent = error.message || "會員編號查詢失敗";
       } finally {
         button.disabled = false;
         button.textContent = "查詢";
@@ -82,7 +99,6 @@
     };
     modal.querySelector("#rosterLookupSearch")?.addEventListener("click", search);
     modal.querySelector("#rosterLookupName")?.addEventListener("keydown", (event) => { if (event.key === "Enter") search(); });
-    modal.querySelector("#rosterLookupPhone")?.addEventListener("keydown", (event) => { if (event.key === "Enter") search(); });
     document.body.append(modal);
     modal.querySelector("#rosterLookupName")?.focus();
   }
