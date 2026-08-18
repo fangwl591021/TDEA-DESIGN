@@ -1,5 +1,5 @@
 import { adjustPoints, awardPoints, getWallet } from './points.js';
-import { newId, resolveCanonicalMemberId, resolveLineMember } from './member-repository.js';
+import { getMember, newId, resolveCanonicalMemberId, resolveLineMember } from './member-repository.js';
 
 const ALLOWED_POINT_EVENTS = new Set([
   'daily_ad_checkin',
@@ -222,9 +222,26 @@ async function readJson(request) {
 
 export async function handleTdeaPointService(request, env) {
   const url = new URL(request.url);
-  if (!url.pathname.startsWith('/internal/tdea/points')) return null;
+  const memberMatch = url.pathname.match(/^\/internal\/tdea\/member\/([^/]+)$/);
+  const isPointRequest = url.pathname.startsWith('/internal/tdea/points');
+  if (!memberMatch && !isPointRequest) return null;
   if (!authorized(request, env)) return json({ success: false, error: 'Forbidden' }, 403);
-  if (!env.DB) return json({ success: false, error: 'Point database is unavailable' }, 503);
+  if (!env.DB) return json({ success: false, error: 'TDEA database is unavailable' }, 503);
+
+  if (request.method === 'GET' && memberMatch) {
+    const lineUserId = decodeURIComponent(memberMatch[1]);
+    const userId = await userIdFromLineUid(env.DB, lineUserId);
+    if (!userId) return json({ success: true, registered: false, member: null });
+    const member = await getMember(env.DB, userId);
+    if (!member) return json({ success: true, registered: false, member: null });
+    return json({
+      success: true,
+      registered: Boolean(clean(member.profileCompletedAt, 80)),
+      userId,
+      lineUserId,
+      member,
+    });
+  }
 
   const balanceMatch = url.pathname.match(/^\/internal\/tdea\/points\/([^/]+)$/);
   if (request.method === 'GET' && balanceMatch) {
