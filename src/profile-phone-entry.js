@@ -1,4 +1,6 @@
 import app from './business-crm-entry.js';
+import { sessionTokenFromCookie, verifySession } from './auth.js';
+import { resolveCanonicalMemberId } from './member-repository.js';
 
 const json = (data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const clean=(v,n=160)=>String(v??'').trim().slice(0,n);
@@ -34,22 +36,71 @@ async function lookupLiveRosterMemberNumber(env,body){
   };
 }
 
-async function syncRosterPhone(env, profile){
-  const memberType=clean(profile?.memberType,20).toLowerCase();
-  const memberNumber=clean(profile?.memberNumber,80).toUpperCase();
-  const phone=normalizePhone(profile?.phone);
-  if(!['association','vendor'].includes(memberType)) return {synced:false,skipped:true,reason:'general_member'};
-  if(!memberNumber) return {synced:false,skipped:true,reason:'missing_member_number'};
-  if(!/^09\d{8}$/.test(phone)) throw new Error('請輸入正確的台灣行動電話');
+function authTokenFromRequest(request){
+  const authorization=clean(request.headers.get('authorization'),4096);
+  if(/^Bearer\s+/i.test(authorization)) return authorization.replace(/^Bearer\s+/i,'').trim();
+  return sessionTokenFromCookie(request.headers.get('cookie')||'');
+}
+
+async function currentMemberSnapshot(env,request){
+  if(!env.DB||!env.SESSION_SIGNING_SECRET) throw new Error('會員同步驗證服務尚未設定');
+  const claims=await verifySession(authTokenFromRequest(request),env.SESSION_SIGNING_SECRET);
+  if(!claims?.sub) throw new Error('會員登入狀態已失效');
+  const userId=await resolveCanonicalMemberId(env.DB,claims.sub);
+  const profile=await env.DB.prepare(`
+    SELECT platform_user_id, display_name, full_name, phone, email, gender, birthday,
+           member_number, member_type, roster_member_number, roster_verified_name,
+           roster_verified_at, roster_source
+    FROM member_profiles
+    WHERE platform_user_id = ?
+    LIMIT 1
+  `).bind(userId).first();
+  if(!profile) throw new Error('找不到會員資料');
+  const identity=await env.DB.prepare(`
+    SELECT provider_subject
+    FROM external_identities
+    WHERE provider='line_login' AND verification_status='verified'
+      AND (platform_user_id = ? OR platform_user_id IN (
+        SELECT alias_user_id FROM member_account_aliases WHERE canonical_user_id = ?
+      ))
+    ORDER BY last_verified_at DESC
+    LIMIT 1
+  `).bind(userId,userId).first();
+  const memberType=['association','vendor'].includes(clean(profile.member_type,20).toLowerCase())
+    ? clean(profile.member_type,20).toLowerCase()
+    : 'general';
+  const memberNumber=memberType==='general'
+    ? clean(profile.member_number,100).toUpperCase()
+    : clean(profile.roster_member_number,100).toUpperCase();
+  return {
+    tdeaDesignUserId:userId,
+    memberType,
+    memberNumber,
+    fullName:clean(profile.full_name||profile.display_name,180),
+    displayName:clean(profile.display_name||profile.full_name,180),
+    phone:normalizePhone(profile.phone),
+    email:clean(profile.email,320),
+    gender:clean(profile.gender,30),
+    birthday:clean(profile.birthday,30),
+    lineUserId:clean(identity?.provider_subject,256),
+    loginAccess:true,
+    source:'tdea-design-member-profile',
+  };
+}
+
+async function syncUnifiedMemberMaster(env,request){
   if(!env.TDEA_WORKER?.fetch) throw new Error('TDEA 名冊同步服務尚未連線');
-  const response=await env.TDEA_WORKER.fetch(new Request('https://tdea-roster.internal/api/roster/member-contact',{
+  const member=await currentMemberSnapshot(env,request);
+  if(!member.memberNumber) throw new Error('會員編號尚未建立，無法同步會員主檔');
+  if(!member.lineUserId) throw new Error('尚未取得 LINE UID，無法完成會員身分綁定');
+  const response=await env.TDEA_WORKER.fetch(new Request('https://tdea-roster.internal/api/internal/tdea-design/member-upsert',{
     method:'POST',
     headers:{'content-type':'application/json','accept':'application/json'},
-    body:JSON.stringify({memberType,memberNumber,phone}),
+    body:JSON.stringify(member),
   }));
   const result=await response.json().catch(()=>({}));
-  if(!response.ok||result?.success!==true) throw new Error(result?.error||'TDEA 名冊電話同步失敗');
-  return {synced:true,record:result.record||null};
+  if(!response.ok||result?.success!==true) throw new Error(result?.message||result?.error||'統一會員主檔同步失敗');
+  return {synced:true,memberType:member.memberType,memberNumber:member.memberNumber,lineUserId:member.lineUserId,created:Boolean(result.created),source:result.source||'manager/state.json'};
 }
 
 async function diagnoseRosterBinding(env,url){
@@ -99,16 +150,15 @@ export default {
       }
     }
     if(request.method==='PATCH'&&url.pathname==='/v1/me'){
-      const profile=await request.clone().json().catch(()=>({}));
-      const response=await app.fetch(request,env,ctx);
+      const response=await app.fetch(request.clone(),env,ctx);
       if(!response.ok) return response;
       const payload=await response.clone().json().catch(()=>null);
       try{
-        const rosterContact=await syncRosterPhone(env,profile);
-        return json(payload&&typeof payload==='object'?{...payload,rosterContact}: {success:true,rosterContact},response.status);
+        const memberMaster=await syncUnifiedMemberMaster(env,request);
+        return json(payload&&typeof payload==='object'?{...payload,memberMaster}: {success:true,memberMaster},response.status);
       }catch(error){
-        console.error('Roster phone sync failed',error);
-        return json({success:false,error:error?.message||'TDEA 名冊電話同步失敗',profileSaved:true},502);
+        console.error('Unified member master sync failed',error);
+        return json({success:false,error:error?.message||'統一會員主檔同步失敗',profileSaved:true},502);
       }
     }
     return app.fetch(request,env,ctx);
