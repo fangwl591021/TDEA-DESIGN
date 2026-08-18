@@ -1,6 +1,14 @@
 (() => {
   const FLAG = 'tdea_open_registration_records';
 
+  function authHeaders() {
+    const token = localStorage.getItem('klinkweb_session') || '';
+    return {
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+      'content-type': 'application/json',
+    };
+  }
+
   function restoreDailyTab() {
     const tabs = document.querySelector('.daily-panel-tabs');
     if (!tabs || tabs.querySelector('[data-registration-query-restore]')) return;
@@ -32,90 +40,76 @@
     btn.click();
   }
 
-  async function remitApi(sessionId, options = {}) {
-    const token = localStorage.getItem('klinkweb_session') || '';
-    const headers = { ...(token ? { authorization: `Bearer ${token}` } : {}), ...(options.headers || {}) };
-    if (options.body) headers['content-type'] = 'application/json';
-    const url = options.method === 'POST' ? '/v1/course-remittance' : `/v1/course-remittance?sessionId=${encodeURIComponent(sessionId)}`;
-    const response = await fetch(url, { ...options, headers, credentials: 'same-origin' });
+  async function reportNativePayment(registrationId, queryCode, remittanceLast5, note = '') {
+    const response = await fetch('/v1/tdea-activity-records/payment-report', {
+      method: 'POST',
+      headers: authHeaders(),
+      credentials: 'same-origin',
+      body: JSON.stringify({ registrationId, queryCode, remittanceLast5, note }),
+    });
     const data = await response.json().catch(() => ({}));
-    if (!response.ok || data.success === false) throw new Error(data.error || '匯款資料處理失敗');
+    if (!response.ok || data.success === false) throw new Error(data.error || '匯款回報失敗');
     return data;
   }
 
-  function statusText(status) {
-    if (status === '匯款審核中') return '匯款審核中';
-    if (status === '已完款' || status === '已繳費' || status === '已收款') return '已確認收款';
-    return '未繳費';
-  }
-
-  async function enhanceRecordCard(card) {
+  function enhanceNativeRecord(card) {
     if (card.dataset.remittanceRestore === '1') return;
-    if (card.querySelector('.course-status.cancelled')) return;
-    const sessionId = (card.querySelector('.course-record-id')?.textContent || '').trim();
-    if (!sessionId) return;
+    if (card.querySelector('.tdea-record-payment,[data-tdea-payment-report]')) {
+      card.dataset.remittanceRestore = '1';
+      return;
+    }
+
+    const cancel = card.querySelector('[data-cancel-native-record]');
+    const registrationId = String(card.dataset.nativeRecord || cancel?.dataset.cancelNativeRecord || '').trim();
+    const queryCode = String(cancel?.dataset.queryCode || '').trim();
+    if (!registrationId || !queryCode) return;
+
     card.dataset.remittanceRestore = '1';
-
-    const wrap = document.createElement('div');
-    wrap.className = 'course-remittance-restore';
-    wrap.style.cssText = 'margin-top:14px;padding-top:14px;border-top:1px solid #eaded7;';
+    const wrap = document.createElement('section');
+    wrap.className = 'tdea-record-payment course-remittance-restore';
+    wrap.style.cssText = 'margin:14px 0;padding:14px;border:1px solid #f1d5c8;border-radius:12px;background:#fffaf7;display:grid;gap:8px';
     wrap.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px">
-        <strong style="font-size:14px">匯款資料回填</strong>
-        <span data-remit-status style="font-size:13px;color:#9a6b57">讀取中…</span>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px">
+        <strong>匯款資料回填</strong>
+        <span data-remit-status style="font-size:13px;color:#9a6b57">尚未回報</span>
       </div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <input data-remit-last5 type="text" inputmode="numeric" maxlength="5" placeholder="請輸入匯款後五碼" style="min-width:0;flex:1;height:44px;border:1px solid #e6cfc4;border-radius:12px;padding:0 12px;font-size:15px;background:#fff" />
-        <button data-remit-submit type="button" class="btn" style="width:auto;min-width:112px;height:44px;margin:0">送出審核</button>
-      </div>`;
+      <input data-remit-last5 inputmode="numeric" maxlength="5" pattern="[0-9]{5}" placeholder="輸入匯款帳號末五碼" style="min-height:44px;border:1px solid #dcc9c0;border-radius:10px;padding:8px 12px;font-size:16px;background:#fff">
+      <input data-remit-note maxlength="120" placeholder="備註（選填）" style="min-height:44px;border:1px solid #dcc9c0;border-radius:10px;padding:8px 12px;font-size:16px;background:#fff">
+      <button data-remit-submit type="button" class="btn">回報匯款</button>`;
 
-    const cancel = [...card.querySelectorAll('button')].find(b => (b.textContent || '').includes('取消報名'));
     if (cancel?.parentElement) cancel.parentElement.insertBefore(wrap, cancel);
     else card.appendChild(wrap);
 
     const input = wrap.querySelector('[data-remit-last5]');
+    const note = wrap.querySelector('[data-remit-note]');
     const status = wrap.querySelector('[data-remit-status]');
     const submit = wrap.querySelector('[data-remit-submit]');
 
-    try {
-      const data = await remitApi(sessionId);
-      const remittance = data.remittance || {};
-      input.value = remittance.last5Digits || '';
-      status.textContent = statusText(remittance.paymentStatus);
-      if (['已完款','已繳費','已收款'].includes(remittance.paymentStatus)) {
-        input.disabled = true;
-        submit.disabled = true;
-        submit.textContent = '已確認';
-      }
-    } catch (error) {
-      status.textContent = '未繳費';
-    }
-
     submit.addEventListener('click', async () => {
-      const last5Digits = String(input.value || '').replace(/\D/g, '').slice(0, 5);
-      if (last5Digits.length < 4) {
-        status.textContent = '請輸入正確後五碼';
+      const last5 = String(input.value || '').replace(/\D/g, '').slice(0, 5);
+      if (last5.length !== 5) {
+        status.textContent = '請輸入 5 碼';
         input.focus();
         return;
       }
       submit.disabled = true;
-      const old = submit.textContent;
       submit.textContent = '送出中…';
       try {
-        const data = await remitApi(sessionId, { method:'POST', body: JSON.stringify({ sessionId, last5Digits }) });
-        input.value = data.remittance?.last5Digits || last5Digits;
-        status.textContent = '匯款審核中';
+        await reportNativePayment(registrationId, queryCode, last5, String(note.value || '').trim());
+        status.textContent = '已回報，待核對';
         submit.textContent = '已送出';
+        input.disabled = true;
+        note.disabled = true;
       } catch (error) {
         status.textContent = error.message || '送出失敗';
         submit.disabled = false;
-        submit.textContent = old;
+        submit.textContent = '回報匯款';
       }
     });
   }
 
   function restoreRemittanceFields() {
-    document.querySelectorAll('.course-record-card').forEach(enhanceRecordCard);
+    document.querySelectorAll('.course-record-card.tdea-native-record').forEach(enhanceNativeRecord);
   }
 
   function run() {
