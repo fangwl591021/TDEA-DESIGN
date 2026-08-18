@@ -44,7 +44,7 @@ export async function verifyTdeaRosterMember(service, lookupSecret, { memberType
   };
 }
 
-export async function lookupTdeaRosterMemberNumber(service, lookupSecret, { memberType, fullName }) {
+export async function lookupTdeaRosterMemberNumber(service, lookupSecret, { memberType, fullName, phone }) {
   const type = normalizeMemberType(memberType);
   const name = clean(fullName, 120);
   if (!["association", "vendor"].includes(type)) throw new Error("請先選擇協會會員或廠商會員");
@@ -54,7 +54,7 @@ export async function lookupTdeaRosterMemberNumber(service, lookupSecret, { memb
   const response = await service.fetch(new Request("https://tdea-roster.internal/api/internal/tdea-design/member-number-lookup", {
     method: "POST",
     headers: { accept: "application/json", "content-type": "application/json", "x-tdea-design-key": clean(lookupSecret, 500) },
-    body: JSON.stringify({ memberType: type, fullName: name }),
+    body: JSON.stringify({ memberType: type, fullName: name, phone: clean(phone, 40) }),
   }));
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.success || !payload?.match?.memberNumber) {
