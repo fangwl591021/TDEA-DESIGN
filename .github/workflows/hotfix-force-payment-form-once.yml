@@ -1,0 +1,45 @@
+name: Hotfix force payment form once
+on:
+  push:
+    paths:
+      - '.github/workflows/hotfix-force-payment-form-once.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+          fetch-depth: 0
+      - name: Patch native activity payment form
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('public/app-20260803-123.js')
+          s = p.read_text(encoding='utf-8')
+          old = "  if (amount <= 0) return '';"
+          new = "  if (amount <= 0 && row.status === 'cancelled') return '';"
+          if old not in s:
+              raise SystemExit('payment early-return anchor not found')
+          s = s.replace(old, new, 1)
+          old2 = '    <div><strong>報名費：</strong>NT$ ${esc(amount.toLocaleString())}</div>'
+          new2 = "    ${amount > 0 ? `<div><strong>報名費：</strong>NT$ ${esc(amount.toLocaleString())}</div>` : ''}"
+          if old2 not in s:
+              raise SystemExit('payment amount markup anchor not found')
+          s = s.replace(old2, new2, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Verify
+        run: |
+          node --check public/app-20260803-123.js
+          grep -n -A20 -B5 "function tdeaRecordPaymentMarkup" public/app-20260803-123.js
+      - name: Commit
+        run: |
+          rm -f .github/workflows/hotfix-force-payment-form-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/app-20260803-123.js .github/workflows
+          git commit -m "Force remittance form for active activity records"
+          git push origin HEAD:agent/full-project-transplant
