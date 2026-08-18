@@ -1580,11 +1580,11 @@ function tdeaRecordPaymentMarkup(row = {}) {
   const payment = row.payment || {};
   const activity = row.activity || {};
   const amount = Number(payment.amount || activity.paymentAmount || 0);
-  if (amount <= 0) return '';
+  if (amount <= 0 && row.status === 'cancelled') return '';
   const remittanceInfo = activity.remittanceInfo || activity.paymentInfo || activity.bankInfo || '';
   const canReport = row.status !== 'cancelled' && payment.status !== 'paid';
   return `<section class="tdea-record-payment" style="margin:14px 0;padding:14px;border:1px solid #f1d5c8;border-radius:12px;background:#fffaf7;display:grid;gap:8px">
-    <div><strong>報名費：</strong>NT$ ${esc(amount.toLocaleString())}</div>
+    ${amount > 0 ? `<div><strong>報名費：</strong>NT$ ${esc(amount.toLocaleString())}</div>` : ''}
     <div><strong>付款狀態：</strong>${esc(tdeaRecordPaymentStatus(payment))}</div>
     ${remittanceInfo ? `<div style="white-space:pre-wrap"><strong>匯款資訊：</strong>${esc(remittanceInfo)}</div>` : `<div class="muted">尚未設定匯款資訊，請聯絡主辦單位。</div>`}
     ${payment.remittanceLast5 ? `<div><strong>已回報末五碼：</strong>${esc(payment.remittanceLast5)}</div>` : ''}
