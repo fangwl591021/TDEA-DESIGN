@@ -6,7 +6,7 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    "run_worker_first": ["/", "/api/*", "/v1/*", "/internal/*", "/i/*", "/w/*", "/c/*", "/r/*", "/akaffit-official", "/akaffit-official-runtime", "/akaffit-official-slick.js", "/akaffit-official-slick.css", "/akaffit-official-slick-theme.css", "/akaffit-official-font/*", "/admin", "/admin/*", "/admin.html", "/assets/checkin-template/*"]
+    "run_worker_first": ["/", "/app-20260803-123.js", "/api/*", "/v1/*", "/internal/*", "/i/*", "/w/*", "/c/*", "/r/*", "/akaffit-official", "/akaffit-official-runtime", "/akaffit-official-slick.js", "/akaffit-official-slick.css", "/akaffit-official-slick-theme.css", "/akaffit-official-font/*", "/admin", "/admin/*", "/admin.html", "/assets/checkin-template/*"]
   },
   "vars": {
     "LIFF_ID": "2005868456-3Ip8H1Bx",
