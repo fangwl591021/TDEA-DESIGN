@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tdea-design",
-  "main": "src/server-monitor-entry.js",
+  "main": "src/cross-app-identity-entry.js",
   "compatibility_date": "2026-07-17",
   "assets": {
     "directory": "./public",
