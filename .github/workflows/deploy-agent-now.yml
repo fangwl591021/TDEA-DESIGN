@@ -1,0 +1,28 @@
+name: Deploy agent branch now
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/deploy-agent-now.yml'
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/full-project-transplant
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: node --check public/daily-checkin-direct.js
+      - run: node --check src/remittance-entry.js
+      - name: Deploy tdea-design
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
