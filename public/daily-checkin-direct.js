@@ -1,27 +1,35 @@
 (() => {
   let busy = false;
   const sessionToken = () => localStorage.getItem('klinkweb_session') || '';
+  const checkinTargets = [
+    '[data-home-inline="daily"]',
+    '[data-home-action="dailyCheckin"]',
+    '[data-home-action="daily"]',
+    '[data-direct-daily-checkin]',
+    '#checkin',
+  ].join(',');
 
   function ensureNoticeStyles() {
     if (document.getElementById('tdea-checkin-notice-style')) return;
     const style = document.createElement('style');
     style.id = 'tdea-checkin-notice-style';
     style.textContent = `
-      .tdea-checkin-notice{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;background:rgba(18,22,20,.56);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px);animation:tdeaCheckinFade .18s ease-out}
+      .tdea-checkin-notice{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;background:rgba(39,24,18,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:tdeaCheckinFade .18s ease-out}
       .tdea-checkin-notice[hidden]{display:none!important}
-      .tdea-checkin-notice-card{width:min(352px,calc(100vw - 40px));background:#fff;border-radius:26px;padding:28px 24px 22px;text-align:center;box-shadow:0 24px 64px rgba(0,0,0,.22);animation:tdeaCheckinPop .24s cubic-bezier(.2,.9,.28,1.1)}
+      .tdea-checkin-notice-card{width:min(352px,calc(100vw - 40px));background:#fffaf7;border:1px solid #f1d5c8;border-radius:26px;padding:28px 24px 22px;text-align:center;box-shadow:0 24px 64px rgba(80,38,20,.24);animation:tdeaCheckinPop .24s cubic-bezier(.2,.9,.28,1.1);font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}
       .tdea-checkin-icon{width:72px;height:72px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;font-size:38px;font-weight:900}
-      .tdea-checkin-notice.success .tdea-checkin-icon{background:#e8f7ef;color:#18a466}
-      .tdea-checkin-notice.done .tdea-checkin-icon{background:#fff2e8;color:#d9772a}
+      .tdea-checkin-notice.success .tdea-checkin-icon{background:#e8f7ef;color:#168253}
+      .tdea-checkin-notice.done .tdea-checkin-icon{background:#fff2dd;color:#b86a00}
       .tdea-checkin-notice.error .tdea-checkin-icon{background:#feeceb;color:#c64840}
-      .tdea-checkin-title{margin:0;color:#202522;font-size:22px;line-height:1.3;font-weight:800;letter-spacing:.01em}
-      .tdea-checkin-points{margin-top:14px;color:#169b61;font-size:42px;line-height:1;font-weight:900;letter-spacing:-.03em}
-      .tdea-checkin-message{margin:14px 0 0;color:#6f7772;font-size:15px;line-height:1.65}
-      .tdea-checkin-balance{margin:16px auto 0;width:100%;padding:13px 16px;border-radius:14px;background:#f7f8f7;color:#4f5752;font-size:14px}
-      .tdea-checkin-balance strong{margin-left:6px;color:#202522;font-size:17px}
-      .tdea-checkin-confirm{width:100%;height:50px;margin-top:22px;border:0;border-radius:15px;background:#18a466;color:#fff;font-size:16px;font-weight:800;cursor:pointer}
-      .tdea-checkin-notice.done .tdea-checkin-confirm{background:#d9772a}
-      .tdea-checkin-notice.error .tdea-checkin-confirm{background:#6b716d}
+      .tdea-checkin-title{margin:0;color:#4a2b20;font-size:22px;line-height:1.3;font-weight:800;letter-spacing:.01em}
+      .tdea-checkin-points{margin-top:14px;color:#168253;font-size:42px;line-height:1;font-weight:900;letter-spacing:-.03em}
+      .tdea-checkin-message{margin:14px 0 0;color:#7d6256;font-size:15px;line-height:1.65;white-space:pre-line}
+      .tdea-checkin-balance{margin:16px auto 0;width:100%;padding:13px 16px;border-radius:14px;background:#fff1e8;color:#8e6756;font-size:14px}
+      .tdea-checkin-balance strong{margin-left:6px;color:#b94e1d;font-size:17px}
+      .tdea-checkin-confirm{width:100%;height:50px;margin-top:22px;border:0;border-radius:15px;background:#bd4f1d;color:#fff;font-size:16px;font-weight:800;cursor:pointer}
+      .tdea-checkin-notice.done .tdea-checkin-confirm{background:#b86a00}
+      .tdea-checkin-notice.error .tdea-checkin-confirm{background:#c64840}
+      [data-tdea-checkin-busy="1"]{pointer-events:none;opacity:.62}
       @keyframes tdeaCheckinFade{from{opacity:0}to{opacity:1}}
       @keyframes tdeaCheckinPop{from{opacity:0;transform:scale(.92) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
       @media (prefers-reduced-motion:reduce){.tdea-checkin-notice,.tdea-checkin-notice-card{animation:none}}
@@ -41,32 +49,78 @@
     modal.setAttribute('role', 'dialog');
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-label', title || '簽到通知');
-    const icon = type === 'success' ? '✓' : type === 'done' ? '✓' : '!';
-    const pointsMarkup = points === null ? '' : `<div class="tdea-checkin-points">+${Number(points) || 0} 點</div>`;
-    const balanceMarkup = balance === null || balance === undefined
-      ? ''
-      : `<div class="tdea-checkin-balance">目前點數 <strong>${new Intl.NumberFormat('zh-TW').format(Number(balance) || 0)} 點</strong></div>`;
-    modal.innerHTML = `
-      <div class="tdea-checkin-notice-card">
-        <div class="tdea-checkin-icon" aria-hidden="true">${icon}</div>
-        <h2 class="tdea-checkin-title">${title || ''}</h2>
-        ${pointsMarkup}
-        <p class="tdea-checkin-message">${message || ''}</p>
-        ${balanceMarkup}
-        <button type="button" class="tdea-checkin-confirm">${buttonText}</button>
-      </div>`;
-    modal.querySelector('.tdea-checkin-confirm')?.addEventListener('click', closeNotice);
-    modal.addEventListener('click', (event) => {
-      if (event.target === modal) closeNotice();
-    });
+
+    const card = document.createElement('div');
+    card.className = 'tdea-checkin-notice-card';
+    const icon = document.createElement('div');
+    icon.className = 'tdea-checkin-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = type === 'error' ? '!' : '✓';
+    const heading = document.createElement('h2');
+    heading.className = 'tdea-checkin-title';
+    heading.textContent = title || '';
+    card.append(icon, heading);
+
+    if (points !== null) {
+      const pointNode = document.createElement('div');
+      pointNode.className = 'tdea-checkin-points';
+      pointNode.textContent = `+${Number(points) || 0} 點`;
+      card.appendChild(pointNode);
+    }
+
+    const copy = document.createElement('p');
+    copy.className = 'tdea-checkin-message';
+    copy.textContent = message || '';
+    card.appendChild(copy);
+
+    if (balance !== null && balance !== undefined && Number.isFinite(Number(balance))) {
+      const balanceNode = document.createElement('div');
+      balanceNode.className = 'tdea-checkin-balance';
+      balanceNode.append('目前點數 ');
+      const strong = document.createElement('strong');
+      strong.textContent = `${new Intl.NumberFormat('zh-TW').format(Number(balance))} 點`;
+      balanceNode.appendChild(strong);
+      card.appendChild(balanceNode);
+    }
+
+    const confirm = document.createElement('button');
+    confirm.type = 'button';
+    confirm.className = 'tdea-checkin-confirm';
+    confirm.textContent = buttonText;
+    confirm.addEventListener('click', closeNotice);
+    card.appendChild(confirm);
+    modal.appendChild(card);
+    modal.addEventListener('click', (event) => { if (event.target === modal) closeNotice(); });
     document.body.appendChild(modal);
-    modal.querySelector('.tdea-checkin-confirm')?.focus({ preventScroll: true });
+    confirm.focus({ preventScroll: true });
+  }
+
+  async function requestJson(path, options = {}) {
+    const headers = {
+      ...(sessionToken() ? { authorization: `Bearer ${sessionToken()}` } : {}),
+      ...(options.headers || {}),
+    };
+    if (!(options.body instanceof FormData)) headers['content-type'] = 'application/json';
+    const response = await fetch(path, { ...options, headers, credentials: 'same-origin' });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.success === false) throw new Error(payload.error || '每日簽到失敗');
+    return payload;
+  }
+
+  async function loadBalance(fallback) {
+    try {
+      const wallet = await requestJson('/v1/points/wallet');
+      const balance = Number(wallet?.wallet?.balance);
+      return Number.isFinite(balance) ? balance : fallback;
+    } catch {
+      return fallback;
+    }
   }
 
   function updateVisibleBalance(balance) {
-    if (balance === undefined || balance === null) return;
-    const formatted = new Intl.NumberFormat('zh-TW').format(Number(balance) || 0);
-    document.querySelectorAll('.ak-point-card strong').forEach((node) => {
+    if (!Number.isFinite(Number(balance))) return;
+    const formatted = new Intl.NumberFormat('zh-TW').format(Number(balance));
+    document.querySelectorAll('.ak-point-card strong, [data-home-action="wallet"] strong').forEach((node) => {
       node.textContent = formatted;
     });
   }
@@ -77,43 +131,67 @@
     const originalDisabled = Boolean(button?.disabled);
     if (button) {
       button.disabled = true;
+      button.dataset.tdeaCheckinBusy = '1';
       button.setAttribute('aria-busy', 'true');
     }
-    try {
-      const response = await fetch('/v1/daily-checkin', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: {
-          'content-type': 'application/json',
-          ...(sessionToken() ? { authorization: `Bearer ${sessionToken()}` } : {}),
-        },
-        body: '{}',
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || payload.success === false) {
-        throw new Error(payload.error || '每日簽到失敗');
-      }
-      const data = payload.data || payload;
-      updateVisibleBalance(data.balance);
 
-      if (data.alreadyChecked) {
+    try {
+      const dailyInfo = await requestJson('/v1/daily-ad');
+      const campaignId = dailyInfo?.campaign?.id || dailyInfo?.campaigns?.[0]?.id || '';
+      if (!campaignId) throw new Error('今天沒有可簽到活動');
+
+      const result = await requestJson('/v1/daily-ad/check-in', {
+        method: 'POST',
+        body: JSON.stringify({ campaignId }),
+      });
+      const pointResult = result?.pointResult || {};
+      const entry = pointResult.entry || {};
+      const entryBalance = Number(entry.balanceAfter ?? entry.balance_after);
+      const balance = await loadBalance(Number.isFinite(entryBalance) ? entryBalance : NaN);
+      updateVisibleBalance(balance);
+
+      if (result.duplicate || pointResult.duplicate) {
         showNotice({
           type: 'done',
           title: '今日已完成簽到',
-          message: '今天的簽到獎勵已領取<br>請明天再來',
-          balance: data.balance,
+          message: '今天的簽到點數已領取，不會重複贈點。\n請明天再來。',
+          balance,
           buttonText: '知道了',
         });
-      } else {
-        showNotice({
-          type: 'success',
-          title: '簽到成功',
-          points: Number(data.points || 1),
-          message: '今日簽到獎勵已入帳',
-          balance: data.balance,
-          buttonText: '我知道了',
-        });
+        return;
       }
+
+      if (pointResult.reason === 'no_active_rule') {
+        showNotice({
+          type: 'error',
+          title: '簽到完成，但尚未贈點',
+          message: '後台目前沒有啟用「每日簽到」點數規則，請通知管理員確認。',
+          balance,
+          buttonText: '關閉',
+        });
+        return;
+      }
+
+      if (pointResult.reason === 'daily_limit_reached') {
+        showNotice({
+          type: 'done',
+          title: '今日簽到已完成',
+          message: '今天的贈點額度已達上限，不會重複贈點。',
+          balance,
+          buttonText: '知道了',
+        });
+        return;
+      }
+
+      const points = Number(entry.delta || 0);
+      showNotice({
+        type: 'success',
+        title: '簽到成功',
+        points,
+        message: '今日簽到獎勵已立即入帳。',
+        balance,
+        buttonText: '我知道了',
+      });
     } catch (error) {
       showNotice({
         type: 'error',
@@ -124,6 +202,7 @@
     } finally {
       if (button) {
         button.disabled = originalDisabled;
+        delete button.dataset.tdeaCheckinBusy;
         button.removeAttribute('aria-busy');
       }
       busy = false;
@@ -132,9 +211,7 @@
 
   document.addEventListener('click', (event) => {
     const element = event.target instanceof Element ? event.target : null;
-    const button = element?.closest(
-      '[data-home-inline="daily"], [data-home-action="dailyCheckin"], [data-direct-daily-checkin], #checkin'
-    );
+    const button = element?.closest(checkinTargets);
     if (!button) return;
     event.preventDefault();
     event.stopPropagation();
