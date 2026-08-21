@@ -21,6 +21,21 @@ async function requireMember(env,request){
   }catch{return '';}
 }
 
+async function lineUserIdForMember(env,memberId){
+  if(!memberId||!env.DB)return '';
+  const row=await env.DB.prepare(`
+    SELECT ei.provider_subject AS line_user_id
+    FROM external_identities ei
+    LEFT JOIN member_account_aliases maa ON maa.alias_user_id=ei.platform_user_id
+    WHERE ei.provider='line_login'
+      AND ei.verification_status='verified'
+      AND COALESCE(maa.canonical_user_id,ei.platform_user_id)=?
+    ORDER BY COALESCE(ei.last_verified_at,ei.created_at) DESC
+    LIMIT 1
+  `).bind(memberId).first().catch(()=>null);
+  return clean(row?.line_user_id,256);
+}
+
 function withTimeout(promise,ms,label){
   let timer;
   const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(`${label} timeout`)),ms);});
@@ -109,11 +124,62 @@ async function resilientShowcase(env,request){
   });
 }
 
+async function directAdReward(env,request){
+  const memberId=await requireMember(env,request);
+  if(!memberId)return json({success:false,error:'請先登入會員'},401);
+  if(!env.TDEA_WORKER||typeof env.TDEA_WORKER.fetch!=='function')return json({success:false,error:'廣告贈點服務暫時無法使用'},503);
+
+  const body=await request.json().catch(()=>({}));
+  const imageUrl=safeUrl(body?.imageUrl);
+  const imageId=clean(body?.imageId,160);
+  if(!imageUrl&&!imageId)return json({success:false,error:'找不到廣告資料'},400);
+
+  const lineUserId=await lineUserIdForMember(env,memberId);
+  if(!lineUserId)return json({success:false,error:'此會員尚未完成 LINE 身分綁定'},409);
+
+  try{
+    const response=await withTimeout(env.TDEA_WORKER.fetch('https://tdea.internal/api/marquee/reward',{
+      method:'POST',
+      headers:{'content-type':'application/json','accept':'application/json'},
+      body:JSON.stringify({lineUserId,imageUrl,imageId}),
+    }),5000,'ad reward');
+    const text=await withTimeout(response.text(),1600,'ad reward body');
+    const payload=JSON.parse(text||'{}');
+    if(!response.ok||payload?.success===false){
+      return json({success:false,error:clean(payload?.message||payload?.error,240)||'廣告贈點失敗'},response.status||502);
+    }
+
+    const adjustment=payload?.result?.serviceResult?.result||payload?.serviceResult?.result||{};
+    const duplicate=Boolean(adjustment?.duplicate||payload?.duplicate);
+    const adjusted=typeof adjustment?.adjusted==='boolean'?adjustment.adjusted:null;
+    const awarded=duplicate?false:(adjusted===null?Boolean(payload?.awarded):adjusted);
+    const balanceValue=payload?.balance??payload?.result?.balance??adjustment?.entry?.balanceAfter??adjustment?.entry?.balance_after;
+    const balance=Number(balanceValue);
+
+    return json({
+      success:true,
+      data:{
+        awarded,
+        duplicate,
+        points:Math.max(0,Number(payload?.points)||0),
+        balance:Number.isFinite(balance)?balance:null,
+        imageId:clean(payload?.imageId||imageId,160),
+      },
+    });
+  }catch(error){
+    console.error('Direct ad reward failed',{error:String(error),memberId});
+    return json({success:false,error:'廣告贈點暫時無法完成，請稍後再試'},504);
+  }
+}
+
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     if(request.method==='GET'&&url.pathname==='/v1/tdea-showcase'){
       return resilientShowcase(env,request);
+    }
+    if(request.method==='POST'&&url.pathname==='/v1/ad-reward'){
+      return directAdReward(env,request);
     }
     return app.fetch(request,env,ctx);
   },
