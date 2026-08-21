@@ -52,6 +52,61 @@ async function recordCrossAppTelemetry(env,request,body,userId){
   return new Response(null,{status:204});
 }
 
+function timeoutResponse(label){
+  return new Response(JSON.stringify({success:false,message:`${label} timeout`}),{
+    status:504,
+    headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'},
+  });
+}
+
+function withDeadline(promise,ms,label){
+  let timer;
+  const timeout=new Promise((resolve)=>{
+    timer=setTimeout(()=>resolve(timeoutResponse(label)),ms);
+  });
+  return Promise.race([promise,timeout]).finally(()=>clearTimeout(timer));
+}
+
+function showcaseEnv(env){
+  const binding=env?.TDEA_WORKER;
+  if(!binding||typeof binding.fetch!=='function')return env;
+
+  const fastBinding={
+    fetch(input,init){
+      let url;
+      try{
+        url=new URL(input instanceof Request?input.url:String(input));
+      }catch{
+        return binding.fetch(input,init);
+      }
+
+      // Showcase only needs activity records. /api/manager-data also merges roster/AIWE
+      // data, which is much heavier and can make the entire showcase wait indefinitely.
+      if(url.pathname==='/api/manager-data')url.pathname='/api/activities';
+
+      let outbound;
+      if(input instanceof Request){
+        outbound=new Request(url.toString(),input);
+        outbound=binding.fetch(outbound,init);
+      }else{
+        outbound=binding.fetch(url.toString(),init);
+      }
+
+      if(url.pathname==='/api/activities'||url.pathname==='/api/marquee'){
+        return withDeadline(outbound,4500,url.pathname);
+      }
+      return outbound;
+    },
+  };
+
+  return new Proxy(env,{
+    get(target,prop,receiver){
+      if(prop==='TDEA_WORKER')return fastBinding;
+      return Reflect.get(target,prop,receiver);
+    },
+  });
+}
+
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
@@ -66,6 +121,11 @@ export default {
         }
       }
     }
+
+    if(request.method==='GET'&&url.pathname==='/v1/tdea-showcase'){
+      return app.fetch(request,showcaseEnv(env),ctx);
+    }
+
     return app.fetch(request,env,ctx);
   },
   scheduled(controller,env,ctx){return app.scheduled?.(controller,env,ctx);},
