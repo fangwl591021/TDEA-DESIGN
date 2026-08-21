@@ -4,7 +4,36 @@
 
   let busy = false;
   const sessionToken = () => localStorage.getItem('klinkweb_session') || '';
-  const rewardTargets = '[data-direct-ad-reward]';
+  const rewardTargets = [
+    '[data-direct-ad-reward]',
+    '.tdea-ad-card a.btn',
+    '.tdea-ad-card button.btn',
+  ].join(',');
+
+  function isRewardControl(control) {
+    if (!(control instanceof Element)) return false;
+    if (control.matches('[data-direct-ad-reward]')) return true;
+    if (!control.closest('.tdea-ad-card')) return false;
+    return /廣告贈點/.test(String(control.textContent || ''));
+  }
+
+  function neutralizeNavigation(control) {
+    if (!(control instanceof Element)) return;
+    control.dataset.directAdReward = '1';
+    if (control.matches('a')) {
+      control.removeAttribute('target');
+      control.removeAttribute('rel');
+      control.removeAttribute('href');
+      control.setAttribute('role', 'button');
+    }
+  }
+
+  function cleanupLegacyHash() {
+    if (location.hash !== '#direct-ad-reward') return;
+    try {
+      history.replaceState(history.state, '', `${location.pathname}${location.search}`);
+    } catch {}
+  }
 
   function ensureNoticeStyles() {
     if (document.getElementById('tdea-ad-reward-notice-style')) return;
@@ -12,6 +41,7 @@
     style.id = 'tdea-ad-reward-notice-style';
     style.textContent = `
       .tdea-ad-reward-notice{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;background:rgba(39,24,18,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:tdeaAdRewardFade .18s ease-out}
+      .tdea-ad-reward-notice[hidden]{display:none!important}
       .tdea-ad-reward-notice-card{width:min(352px,calc(100vw - 40px));background:#fffaf7;border:1px solid #f1d5c8;border-radius:26px;padding:28px 24px 22px;text-align:center;box-shadow:0 24px 64px rgba(80,38,20,.24);animation:tdeaAdRewardPop .24s cubic-bezier(.2,.9,.28,1.1);font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}
       .tdea-ad-reward-icon{width:72px;height:72px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;font-size:38px;font-weight:900}
       .tdea-ad-reward-notice.success .tdea-ad-reward-icon{background:#e8f7ef;color:#168253}
@@ -114,13 +144,16 @@
     });
   }
 
-  async function adReward(button) {
+  async function adReward(control) {
     if (busy) return;
-    const card = button.closest('.tdea-ad-card');
+    neutralizeNavigation(control);
+    cleanupLegacyHash();
+
+    const card = control.closest('.tdea-ad-card');
     const image = card?.querySelector('img');
-    const imageUrl = button.dataset.imageUrl || image?.currentSrc || image?.src || '';
-    const imageId = button.dataset.imageId || '';
-    const adTitle = button.dataset.adTitle || card?.querySelector('strong')?.textContent?.trim() || image?.alt?.trim() || 'TDEA 廣告贈點';
+    const imageUrl = control.dataset.imageUrl || image?.currentSrc || image?.src || '';
+    const imageId = control.dataset.imageId || '';
+    const adTitle = control.dataset.adTitle || card?.querySelector('strong')?.textContent?.trim() || image?.alt?.trim() || 'TDEA 廣告贈點';
 
     if (!imageUrl && !imageId) {
       showNotice({
@@ -133,10 +166,10 @@
     }
 
     busy = true;
-    const originalDisabled = Boolean(button.disabled);
-    button.disabled = true;
-    button.dataset.tdeaAdRewardBusy = '1';
-    button.setAttribute('aria-busy', 'true');
+    const originalDisabled = Boolean(control.disabled);
+    control.disabled = true;
+    control.dataset.tdeaAdRewardBusy = '1';
+    control.setAttribute('aria-busy', 'true');
 
     try {
       const result = await requestJson('/v1/ad-reward', {
@@ -174,20 +207,37 @@
         buttonText: '關閉',
       });
     } finally {
-      button.disabled = originalDisabled;
-      delete button.dataset.tdeaAdRewardBusy;
-      button.removeAttribute('aria-busy');
+      control.disabled = originalDisabled;
+      delete control.dataset.tdeaAdRewardBusy;
+      control.removeAttribute('aria-busy');
       busy = false;
     }
   }
 
+  function findRewardControl(target) {
+    const element = target instanceof Element ? target : null;
+    const control = element?.closest(rewardTargets);
+    return isRewardControl(control) ? control : null;
+  }
+
+  function neutralizeFromEvent(event) {
+    const control = findRewardControl(event.target);
+    if (!control) return;
+    neutralizeNavigation(control);
+  }
+
+  document.addEventListener('pointerdown', neutralizeFromEvent, true);
+  document.addEventListener('touchstart', neutralizeFromEvent, { capture: true, passive: true });
+
   document.addEventListener('click', (event) => {
-    const element = event.target instanceof Element ? event.target : null;
-    const button = element?.closest(rewardTargets);
-    if (!button) return;
+    const control = findRewardControl(event.target);
+    if (!control) return;
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    adReward(button);
+    neutralizeNavigation(control);
+    adReward(control);
   }, true);
+
+  cleanupLegacyHash();
 })();
