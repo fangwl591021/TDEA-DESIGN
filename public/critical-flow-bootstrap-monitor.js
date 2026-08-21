@@ -45,6 +45,7 @@
         keepalive: true,
         headers: {
           'content-type': 'application/json',
+          'x-tdea-monitor-session': getSessionId(),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
@@ -105,6 +106,15 @@
     const method = String(init.method || input?.method || 'GET').toUpperCase();
     let url = null;
     try { url = new URL(requestUrl, location.origin); } catch {}
+
+    let fetchArgs = args;
+    if (url && url.origin === location.origin && url.pathname.startsWith('/v1/')) {
+      const headers = new Headers(input instanceof Request ? input.headers : undefined);
+      new Headers(init.headers || {}).forEach((value, key) => headers.set(key, value));
+      headers.set('x-tdea-monitor-session', getSessionId());
+      fetchArgs = [input, { ...init, headers }];
+    }
+
     const descriptor = active && url && url.origin === location.origin ? describeCriticalRequest(url, method) : null;
 
     if (descriptor) {
@@ -117,7 +127,7 @@
     }
 
     try {
-      const response = await originalFetch(...args);
+      const response = await originalFetch(...fetchArgs);
       if (descriptor) {
         const durationMs = Math.round(performance.now() - startedAt);
         sendEvent(response.ok ? 'api_result' : 'api_error', {
