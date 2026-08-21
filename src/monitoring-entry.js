@@ -152,12 +152,27 @@ async function monitoringReport(env,request,ctx){
   });
 }
 
+async function adminHtmlWithMonitoring(env,request,ctx){
+  const response=await app.fetch(request,env,ctx);
+  const contentType=response.headers.get('content-type')||'';
+  if(!response.ok||!contentType.includes('text/html'))return response;
+  const html=await response.text();
+  if(html.includes('/admin-monitor.js'))return new Response(html,{status:response.status,headers:response.headers});
+  const scripts='<script src="/usage-monitor.js?v=20260821-1" defer></script><script src="/admin-monitor.js?v=20260821-1" defer></script>';
+  const body=html.includes('</body>')?html.replace('</body>',`${scripts}</body>`):`${html}${scripts}`;
+  const headers=new Headers(response.headers);
+  headers.delete('content-length');
+  headers.set('cache-control','no-store');
+  return new Response(body,{status:response.status,headers});
+}
+
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     try{
       if(request.method==='POST'&&url.pathname==='/v1/telemetry/event')return await recordUsageEvent(env,request);
       if(request.method==='GET'&&url.pathname==='/v1/admin/monitoring')return await monitoringReport(env,request,ctx);
+      if(request.method==='GET'&&['/admin','/admin/','/admin/index.html','/admin.html'].includes(url.pathname))return await adminHtmlWithMonitoring(env,request,ctx);
     }catch(error){
       if(url.pathname==='/v1/telemetry/event')return new Response(null,{status:204});
       return json({success:false,error:error?.message||'監控資料讀取失敗'},500);
