@@ -35,6 +35,19 @@
     };
   }
 
+  function flowCategory(text = '') {
+    const value = String(text || '').toLowerCase();
+    if (/auth|login|登入|註冊|registerphone|phoneauth/.test(value)) return 'member_registration';
+    if (/register|registration|報名|activity|course|session/.test(value)) return 'activity_registration';
+    if (/daily-checkin|dailycheckin|每日簽到/.test(value)) return 'daily_checkin';
+    if (/card|名片/.test(value)) return 'card';
+    return '';
+  }
+
+  function isCriticalApiPath(path = '') {
+    return /auth|login|register|registration|course|activity|session|daily-checkin/i.test(path);
+  }
+
   function sendEvent(eventType, detail = {}) {
     const token = sessionToken();
     const payload = {
@@ -64,23 +77,21 @@
   function describeTarget(element) {
     if (!element) return { action: '', label: '', target: '' };
     const data = element.dataset || {};
-    const action = data.homeAction || data.homeInline || data.dailyPanel || data.taskAction || data.courseView || data.phoneAuthMode || element.id || '';
+    const action = data.homeAction || data.homeInline || data.dailyPanel || data.taskAction || data.courseView || data.phoneAuthMode || data.register || element.id || '';
     let target = element.tagName?.toLowerCase() || '';
     if (element.id) target += `#${clean(element.id, 80)}`;
     if (data.homeAction) target += `[home=${clean(data.homeAction, 80)}]`;
     if (data.homeInline) target += `[inline=${clean(data.homeInline, 80)}]`;
     if (data.dailyPanel) target += `[daily=${clean(data.dailyPanel, 80)}]`;
+    if (data.register) target += `[register=${clean(data.register, 80)}]`;
     if (element.getAttribute?.('href')) target += `[href=${clean(element.getAttribute('href'), 120)}]`;
-    return {
-      action,
-      label: clean(element.getAttribute?.('aria-label') || element.textContent || element.title || action, 240),
-      target,
-    };
+    const label = clean(element.getAttribute?.('aria-label') || element.textContent || element.title || action, 240);
+    return { action, label, target };
   }
 
   document.addEventListener('click', (event) => {
     const node = event.target instanceof Element ? event.target : null;
-    const target = node?.closest('button,a,[role="button"],[data-home-action],[data-home-inline],[data-daily-panel],[data-task-action]');
+    const target = node?.closest('button,a,[role="button"],[data-home-action],[data-home-inline],[data-daily-panel],[data-task-action],[data-register]');
     if (!target) return;
     const described = describeTarget(target);
     sendEvent('click', {
@@ -88,6 +99,25 @@
       metadata: {
         disabled: Boolean(target.disabled),
         pageTitle: clean(document.title, 160),
+        flow: flowCategory(`${described.action} ${described.label} ${described.target}`),
+      },
+    });
+  }, true);
+
+  document.addEventListener('submit', (event) => {
+    const form = event.target instanceof HTMLFormElement ? event.target : null;
+    if (!form) return;
+    const submitter = event.submitter instanceof Element ? event.submitter : form.querySelector('[type="submit"]');
+    const described = describeTarget(submitter || form);
+    const formName = clean(form.getAttribute('aria-label') || form.id || form.name || '表單送出', 160);
+    const descriptor = `${formName} ${described.action} ${described.label}`;
+    sendEvent('form_submit', {
+      action: described.action || form.id || 'form_submit',
+      label: described.label || formName,
+      target: `form#${clean(form.id || '', 80)}`,
+      metadata: {
+        form: formName,
+        flow: flowCategory(descriptor),
       },
     });
   }, true);
@@ -122,26 +152,43 @@
       requestUrl = typeof input === 'string' ? input : input?.url || '';
       method = String(init.method || input?.method || 'GET').toUpperCase();
       const response = await originalFetch(...args);
+      const durationMs = Math.round(performance.now() - started);
       const url = new URL(requestUrl, location.origin);
-      if (url.origin === location.origin && url.pathname.startsWith('/v1/') && url.pathname !== TELEMETRY_URL && !response.ok) {
-        sendEvent('api_error', {
-          action: `${method} ${url.pathname}`,
-          label: `HTTP ${response.status}`,
-          metadata: {
-            status: response.status,
-            durationMs: Math.round(performance.now() - started),
-          },
-        });
+      if (url.origin === location.origin && url.pathname.startsWith('/v1/') && url.pathname !== TELEMETRY_URL) {
+        const action = `${method} ${url.pathname}`;
+        const flow = flowCategory(action);
+        if (!response.ok) {
+          sendEvent('api_error', {
+            action,
+            label: `HTTP ${response.status}`,
+            metadata: { status: response.status, durationMs, flow },
+          });
+        } else if (isCriticalApiPath(url.pathname)) {
+          sendEvent('api_result', {
+            action,
+            label: `HTTP ${response.status}`,
+            metadata: { status: response.status, durationMs, flow },
+          });
+        }
+        if (durationMs >= 5000) {
+          sendEvent('performance_warning', {
+            action,
+            label: `回應過慢 ${durationMs}ms`,
+            metadata: { status: response.status, durationMs, flow },
+          });
+        }
       }
       return response;
     } catch (error) {
+      const durationMs = Math.round(performance.now() - started);
       try {
         const url = new URL(requestUrl || location.href, location.origin);
         if (url.origin === location.origin && url.pathname !== TELEMETRY_URL) {
+          const action = `${method} ${url.pathname}`;
           sendEvent('api_error', {
-            action: `${method} ${url.pathname}`,
+            action,
             label: clean(error?.message || 'Network error', 240),
-            metadata: { status: 0, durationMs: Math.round(performance.now() - started) },
+            metadata: { status: 0, durationMs, flow: flowCategory(action) },
           });
         }
       } catch {}
