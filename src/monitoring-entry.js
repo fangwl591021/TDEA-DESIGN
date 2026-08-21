@@ -4,7 +4,7 @@ import { resolveCanonicalMemberId } from './member-repository.js';
 
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const clean=(value,max=240)=>String(value??'').trim().slice(0,max);
-const allowedEventTypes=new Set(['session_start','page_view','click','api_error','js_error','unhandled_rejection']);
+const allowedEventTypes=new Set(['session_start','page_view','click','form_submit','api_result','api_error','performance_warning','js_error','unhandled_rejection']);
 let schemaReadyPromise=null;
 
 function authTokenFromRequest(request){
@@ -96,6 +96,103 @@ async function requireAdmin(env,request,ctx){
 }
 
 const clamp=(value,min,max,fallback)=>{const number=Number(value);return Number.isFinite(number)?Math.min(max,Math.max(min,Math.floor(number))):fallback;};
+const parseMetadata=(row)=>{try{return JSON.parse(row?.metadata_json||'{}')||{};}catch{return {};}};
+const eventTime=(value)=>{const date=Date.parse(`${String(value||'').replace(' ','T')}Z`);return Number.isFinite(date)?date:0;};
+const flowLabel=(flow)=>flow==='member_registration'?'會員註冊':flow==='activity_registration'?'活動報名':flow==='daily_checkin'?'每日簽到':flow==='card'?'名片功能':'一般操作';
+const issueUser=(row)=>({
+  userId:row.platform_user_id||'',
+  displayName:row.display_name||'',
+  memberNumber:row.member_number||'',
+  sessionId:row.session_id||'',
+});
+
+function buildAlerts(issueRows=[],repeatRows=[]){
+  const alerts=[];
+  const keys=new Set();
+  const push=(alert)=>{
+    const key=alert.key||`${alert.severity}:${alert.sessionId}:${alert.title}:${alert.action}`;
+    if(keys.has(key))return;
+    keys.add(key);
+    alerts.push({...alert,key});
+  };
+
+  for(const row of issueRows){
+    const meta=parseMetadata(row);
+    const flow=clean(meta.flow,60);
+    const status=Number(meta.status||0);
+    const durationMs=Number(meta.durationMs||0);
+    const user=issueUser(row);
+    const criticalFlow=['member_registration','activity_registration'].includes(flow);
+    if(['api_error','js_error','unhandled_rejection'].includes(row.event_type)){
+      const severity=(criticalFlow||status>=500||row.event_type!=='api_error')?'critical':'warning';
+      push({
+        severity,
+        category:flowLabel(flow),
+        title:criticalFlow?`${flowLabel(flow)}失敗`:row.event_type==='api_error'?'API 操作失敗':'前端程式錯誤',
+        message:`${row.action||'操作'}｜${row.label||'發生錯誤'}${durationMs?`｜${durationMs}ms`:''}`,
+        action:row.action||'',
+        path:row.path||'',
+        createdAt:row.created_at,
+        ...user,
+        metadata:meta,
+      });
+    }else if(row.event_type==='performance_warning'){
+      push({
+        severity:criticalFlow?'critical':'warning',
+        category:flowLabel(flow),
+        title:criticalFlow?`${flowLabel(flow)}回應過慢`:'系統回應過慢',
+        message:`${row.action||'API'}｜${durationMs||0}ms`,
+        action:row.action||'',path:row.path||'',createdAt:row.created_at,...user,metadata:meta,
+      });
+    }
+  }
+
+  for(const row of repeatRows){
+    const flow=clean(row.flow,60);
+    const count=Number(row.count||0);
+    push({
+      severity:['member_registration','activity_registration'].includes(flow)&&count>=3?'critical':'warning',
+      category:flowLabel(flow),
+      title:['member_registration','activity_registration'].includes(flow)?`${flowLabel(flow)}重複操作`:'疑似操作卡住',
+      message:`同一操作在 10 分鐘內重複 ${count} 次：${row.label||row.action||'未命名操作'}`,
+      action:row.action||'',createdAt:row.latest_at,...issueUser(row),metadata:{count,flow},
+    });
+  }
+
+  const now=Date.now();
+  const groups=new Map();
+  for(const row of issueRows){
+    const meta=parseMetadata(row);
+    const flow=clean(meta.flow,60);
+    if(!['member_registration','activity_registration'].includes(flow))continue;
+    const key=`${row.session_id}:${flow}`;
+    if(!groups.has(key))groups.set(key,[]);
+    groups.get(key).push({...row,_meta:meta,_time:eventTime(row.created_at)});
+  }
+  for(const rows of groups.values()){
+    rows.sort((a,b)=>a._time-b._time);
+    const attempts=rows.filter((row)=>['click','form_submit'].includes(row.event_type));
+    if(!attempts.length)continue;
+    const attempt=attempts[attempts.length-1];
+    if(now-attempt._time<60000||now-attempt._time>15*60*1000)continue;
+    const flow=attempt._meta.flow;
+    const success=rows.some((row)=>row._time>=attempt._time&&row.event_type==='api_result'&&Number(row._meta.status||0)>=200&&Number(row._meta.status||0)<400);
+    const failed=rows.some((row)=>row._time>=attempt._time&&row.event_type==='api_error');
+    if(success||failed)continue;
+    push({
+      severity:'warning',
+      category:flowLabel(flow),
+      title:`${flowLabel(flow)}可能卡住`,
+      message:`使用者已開始${flowLabel(flow)}，超過 1 分鐘尚未看到成功或失敗結果。`,
+      action:attempt.action||attempt.label||'',path:attempt.path||'',createdAt:attempt.created_at,...issueUser(attempt),metadata:{flow},
+    });
+  }
+
+  return alerts.sort((a,b)=>{
+    const weight=(value)=>value==='critical'?2:1;
+    return weight(b.severity)-weight(a.severity)||eventTime(b.createdAt)-eventTime(a.createdAt);
+  }).slice(0,100);
+}
 
 async function monitoringReport(env,request,ctx){
   if(!await requireAdmin(env,request,ctx))return json({success:false,error:'Unauthorized'},401);
@@ -114,7 +211,7 @@ async function monitoringReport(env,request,ctx){
     values.push(`%${query}%`);
   }
   const whereSql=where.join(' AND ');
-  const [events,summary,topActions,activeNow]=await Promise.all([
+  const [events,summary,topActions,activeNow,issueEvents,repeatClicks]=await Promise.all([
     env.DB.prepare(`SELECT ue.id,ue.session_id,ue.platform_user_id,ue.event_type,ue.action,ue.label,ue.path,ue.target,ue.metadata_json,ue.user_agent,ue.country,ue.cf_ray,ue.client_time,ue.created_at,
       mp.display_name,mp.member_number
       FROM usage_events ue LEFT JOIN member_profiles mp ON mp.platform_user_id=ue.platform_user_id
@@ -122,19 +219,36 @@ async function monitoringReport(env,request,ctx){
     env.DB.prepare(`SELECT
       COUNT(*) AS total_events,
       SUM(CASE WHEN event_type='page_view' THEN 1 ELSE 0 END) AS page_views,
-      SUM(CASE WHEN event_type='click' THEN 1 ELSE 0 END) AS clicks,
+      SUM(CASE WHEN event_type IN ('click','form_submit') THEN 1 ELSE 0 END) AS clicks,
       SUM(CASE WHEN event_type IN ('api_error','js_error','unhandled_rejection') THEN 1 ELSE 0 END) AS errors,
       COUNT(DISTINCT CASE WHEN platform_user_id IS NOT NULL AND platform_user_id!='' THEN platform_user_id ELSE session_id END) AS visitors
       FROM usage_events WHERE created_at >= datetime('now', ?)`).bind(modifier).first(),
     env.DB.prepare(`SELECT action,label,COUNT(*) AS count FROM usage_events
-      WHERE created_at >= datetime('now', ?) AND event_type='click'
+      WHERE created_at >= datetime('now', ?) AND event_type IN ('click','form_submit')
       GROUP BY action,label ORDER BY count DESC LIMIT 10`).bind(modifier).all(),
     env.DB.prepare(`SELECT COUNT(DISTINCT CASE WHEN platform_user_id IS NOT NULL AND platform_user_id!='' THEN platform_user_id ELSE session_id END) AS count
       FROM usage_events WHERE created_at >= datetime('now','-10 minutes')`).first(),
+    env.DB.prepare(`SELECT ue.*,mp.display_name,mp.member_number
+      FROM usage_events ue LEFT JOIN member_profiles mp ON mp.platform_user_id=ue.platform_user_id
+      WHERE ue.created_at >= datetime('now','-60 minutes')
+        AND ue.event_type IN ('click','form_submit','api_result','api_error','performance_warning','js_error','unhandled_rejection')
+      ORDER BY ue.created_at DESC LIMIT 800`).all(),
+    env.DB.prepare(`SELECT ue.session_id,ue.platform_user_id,ue.action,ue.label,MAX(ue.created_at) AS latest_at,COUNT(*) AS count,
+      MAX(json_extract(ue.metadata_json,'$.flow')) AS flow,mp.display_name,mp.member_number
+      FROM usage_events ue LEFT JOIN member_profiles mp ON mp.platform_user_id=ue.platform_user_id
+      WHERE ue.created_at >= datetime('now','-10 minutes') AND ue.event_type IN ('click','form_submit') AND ue.action!=''
+      GROUP BY ue.session_id,ue.platform_user_id,ue.action,ue.label,mp.display_name,mp.member_number
+      HAVING COUNT(*) >= 3 ORDER BY count DESC LIMIT 50`).all(),
   ]);
+  const alerts=buildAlerts(issueEvents.results||[],repeatClicks.results||[]);
+  const affected=new Set(alerts.map((item)=>item.userId||item.sessionId).filter(Boolean));
+  const criticalAlerts=alerts.filter((item)=>item.severity==='critical').length;
+  const warningAlerts=alerts.filter((item)=>item.severity==='warning').length;
   return json({
     success:true,
     hours,
+    health:{criticalAlerts,warningAlerts,affectedUsers:affected.size,status:criticalAlerts?'critical':warningAlerts?'warning':'healthy'},
+    alerts,
     summary:{
       visitors:Number(summary?.visitors||0),
       pageViews:Number(summary?.page_views||0),
@@ -144,11 +258,7 @@ async function monitoringReport(env,request,ctx){
       activeNow:Number(activeNow?.count||0),
     },
     topActions:(topActions.results||[]).map((row)=>({action:row.action||'',label:row.label||'',count:Number(row.count||0)})),
-    events:(events.results||[]).map((row)=>{
-      let metadata={};
-      try{metadata=JSON.parse(row.metadata_json||'{}');}catch{}
-      return {...row,metadata};
-    }),
+    events:(events.results||[]).map((row)=>({...row,metadata:parseMetadata(row)})),
   });
 }
 
@@ -158,7 +268,7 @@ async function adminHtmlWithMonitoring(env,request,ctx){
   if(!response.ok||!contentType.includes('text/html'))return response;
   const html=await response.text();
   if(html.includes('/admin-monitor.js'))return new Response(html,{status:response.status,headers:response.headers});
-  const scripts='<script src="/usage-monitor.js?v=20260821-1" defer></script><script src="/admin-monitor.js?v=20260821-1" defer></script>';
+  const scripts='<script src="/usage-monitor.js?v=20260821-2" defer></script><script src="/admin-monitor.js?v=20260821-2" defer></script>';
   const body=html.includes('</body>')?html.replace('</body>',`${scripts}</body>`):`${html}${scripts}`;
   const headers=new Headers(response.headers);
   headers.delete('content-length');
