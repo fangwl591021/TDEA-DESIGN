@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "tdea-design",
-  "main": "src/showcase-resilience-entry.js",
+  "main": "src/point-operator-open-entry.js",
   "compatibility_date": "2026-07-17",
   "assets": {
     "directory": "./public",
