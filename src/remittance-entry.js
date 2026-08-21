@@ -1,9 +1,11 @@
 import app from './profile-phone-entry.js';
 import { sessionTokenFromCookie, verifySession } from './auth.js';
 import { resolveCanonicalMemberId } from './member-repository.js';
+import { awardPoints, getWallet } from './points.js';
 
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'content-type':'application/json; charset=utf-8','cache-control':'no-store'}});
 const clean=(v,n=160)=>String(v??'').trim().slice(0,n);
+const businessDate=()=>new Date(Date.now()+8*60*60*1000).toISOString().slice(0,10);
 
 function authTokenFromRequest(request){
   const authorization=clean(request.headers.get('authorization'),4096);
@@ -50,14 +52,71 @@ async function saveRemittance(env,request){
   return json({success:true,remittance:{last5Digits:last5,paymentStatus:'匯款審核中'}});
 }
 
+async function directDailyCheckin(env,request){
+  const userId=await currentUserId(env,request);
+  const date=businessDate();
+  const existing=await env.DB.prepare(`
+    SELECT delta,balance_after FROM point_ledger_entries
+    WHERE platform_user_id=? AND event_type='daily_ad_checkin' AND status='posted'
+      AND date(created_at,'+8 hours')=?
+    ORDER BY created_at DESC LIMIT 1
+  `).bind(userId,date).first();
+  if(existing){
+    const wallet=await getWallet(env.DB,userId);
+    return json({success:true,data:{alreadyChecked:true,points:Number(existing.delta||0),balance:Number(wallet.balance||0)}});
+  }
+
+  const pointResult=await awardPoints(env.DB,{
+    userId,
+    eventType:'daily_ad_checkin',
+    eventReference:`daily:${date}`,
+    idempotencyKey:`daily_checkin:${date}:${userId}`,
+    metadata:{source:'direct_daily_checkin',businessDate:date},
+  });
+  if(pointResult.reason==='no_active_rule'){
+    return json({success:false,error:'後台尚未啟用「每日簽到」點數規則'},400);
+  }
+
+  const wallet=await getWallet(env.DB,userId);
+  const alreadyChecked=Boolean(pointResult.duplicate||pointResult.reason==='daily_limit_reached'||pointResult.reason==='once_only_reached');
+  return json({
+    success:true,
+    data:{
+      alreadyChecked,
+      points:pointResult.awarded?Number(pointResult.entry?.delta||0):0,
+      balance:Number(wallet.balance||0),
+    },
+    pointResult,
+  });
+}
+
+async function legacyDailyAdInfo(env,request,ctx){
+  const response=await app.fetch(request,env,ctx);
+  if(!response.ok) return response;
+  const payload=await response.clone().json().catch(()=>null);
+  if(!payload||payload.campaign) return response;
+  return json({
+    ...payload,
+    campaign:{id:'daily_direct',name:'每日簽到',requiredCreativeCount:0,rotationMode:'sequential'},
+    creatives:Array.isArray(payload.creatives)?payload.creatives:[],
+    qualifiedCreativeCount:Number(payload.qualifiedCreativeCount||0),
+    qualifiedCreativeIds:Array.isArray(payload.qualifiedCreativeIds)?payload.qualifiedCreativeIds:[],
+    checkedIn:false,
+  });
+}
+
 export default {
   async fetch(request,env,ctx){
     const url=new URL(request.url);
     try{
       if(request.method==='GET'&&url.pathname==='/v1/course-remittance') return await getRemittance(env,request,url);
       if(request.method==='POST'&&url.pathname==='/v1/course-remittance') return await saveRemittance(env,request);
+      if(request.method==='POST'&&url.pathname==='/v1/daily-checkin') return await directDailyCheckin(env,request);
+      if(request.method==='POST'&&url.pathname==='/v1/daily-ad/check-in') return await directDailyCheckin(env,request);
+      if(request.method==='GET'&&url.pathname==='/v1/daily-ad') return await legacyDailyAdInfo(env,request,ctx);
     }catch(error){
-      return json({success:false,error:error?.message||'匯款資料處理失敗'},400);
+      const fallback=url.pathname.includes('daily')?'每日簽到失敗':'匯款資料處理失敗';
+      return json({success:false,error:error?.message||fallback},400);
     }
     return app.fetch(request,env,ctx);
   },

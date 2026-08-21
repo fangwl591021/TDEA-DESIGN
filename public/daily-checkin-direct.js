@@ -107,16 +107,6 @@
     return payload;
   }
 
-  async function loadBalance(fallback) {
-    try {
-      const wallet = await requestJson('/v1/points/wallet');
-      const balance = Number(wallet?.wallet?.balance);
-      return Number.isFinite(balance) ? balance : fallback;
-    } catch {
-      return fallback;
-    }
-  }
-
   function updateVisibleBalance(balance) {
     if (!Number.isFinite(Number(balance))) return;
     const formatted = new Intl.NumberFormat('zh-TW').format(Number(balance));
@@ -136,21 +126,15 @@
     }
 
     try {
-      const dailyInfo = await requestJson('/v1/daily-ad');
-      const campaignId = dailyInfo?.campaign?.id || dailyInfo?.campaigns?.[0]?.id || '';
-      if (!campaignId) throw new Error('今天沒有可簽到活動');
-
-      const result = await requestJson('/v1/daily-ad/check-in', {
+      const result = await requestJson('/v1/daily-checkin', {
         method: 'POST',
-        body: JSON.stringify({ campaignId }),
+        body: '{}',
       });
-      const pointResult = result?.pointResult || {};
-      const entry = pointResult.entry || {};
-      const entryBalance = Number(entry.balanceAfter ?? entry.balance_after);
-      const balance = await loadBalance(Number.isFinite(entryBalance) ? entryBalance : NaN);
+      const data = result?.data || {};
+      const balance = Number(data.balance);
       updateVisibleBalance(balance);
 
-      if (result.duplicate || pointResult.duplicate) {
+      if (data.alreadyChecked) {
         showNotice({
           type: 'done',
           title: '今日已完成簽到',
@@ -161,33 +145,10 @@
         return;
       }
 
-      if (pointResult.reason === 'no_active_rule') {
-        showNotice({
-          type: 'error',
-          title: '簽到完成，但尚未贈點',
-          message: '後台目前沒有啟用「每日簽到」點數規則，請通知管理員確認。',
-          balance,
-          buttonText: '關閉',
-        });
-        return;
-      }
-
-      if (pointResult.reason === 'daily_limit_reached') {
-        showNotice({
-          type: 'done',
-          title: '今日簽到已完成',
-          message: '今天的贈點額度已達上限，不會重複贈點。',
-          balance,
-          buttonText: '知道了',
-        });
-        return;
-      }
-
-      const points = Number(entry.delta || 0);
       showNotice({
         type: 'success',
         title: '簽到成功',
-        points,
+        points: Number(data.points || 0),
         message: '今日簽到獎勵已立即入帳。',
         balance,
         buttonText: '我知道了',
