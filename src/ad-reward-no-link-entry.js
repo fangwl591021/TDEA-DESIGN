@@ -18,13 +18,15 @@ export default {
       const payload = await response.clone().json().catch(() => null);
       if (!payload || typeof payload !== 'object') return response;
 
-      // 廣告贈點改為 App 內直接贈點後，主 App 不應再取得舊 marquee/LIFF URL。
-      // 主 App 看到空字串後不會生成任何 <a href="...marquee=1">。
+      // 讓主 App 自己產生原生「開啟廣告贈點」控制項，但只給 App 內 hash，
+      // 絕不再回傳 tdeawork marquee/LIFF 外部網址。
+      // 既有 ad-reward-entry-fix.js 會在 capture 階段攔截此控制項，
+      // 直接 POST /v1/ad-reward 並顯示中央 POP。
       return json({
         ...payload,
-        adLiffUrl: '',
+        adLiffUrl: '#direct-ad-reward',
         directAdReward: true,
-      }, response.status, { 'x-tdea-ad-reward-mode': 'direct-pop' });
+      }, response.status, { 'x-tdea-ad-reward-mode': 'direct-pop-native-control' });
     }
 
     return app.fetch(request, env, ctx);
