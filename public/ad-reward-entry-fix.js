@@ -10,8 +10,8 @@
     const style = document.createElement('style');
     style.id = 'tdea-ad-reward-notice-style';
     style.textContent = `
-      .tdea-ad-reward-notice{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;background:rgba(39,24,18,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:tdeaAdRewardFade .18s ease-out}
-      .tdea-ad-reward-card{width:min(352px,calc(100vw - 40px));background:#fffaf7;border:1px solid #f1d5c8;border-radius:26px;padding:28px 24px 22px;text-align:center;box-shadow:0 24px 64px rgba(80,38,20,.24);animation:tdeaAdRewardPop .24s cubic-bezier(.2,.9,.28,1.1);font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}
+      .tdea-ad-reward-notice{position:fixed;inset:0;z-index:2147483646;display:grid;place-items:center;padding:24px;background:rgba(39,24,18,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);animation:tdeaAdRewardFade .18s ease-out}
+      .tdea-ad-reward-notice-card{width:min(352px,calc(100vw - 40px));background:#fffaf7;border:1px solid #f1d5c8;border-radius:26px;padding:28px 24px 22px;text-align:center;box-shadow:0 24px 64px rgba(80,38,20,.24);animation:tdeaAdRewardPop .24s cubic-bezier(.2,.9,.28,1.1);font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}
       .tdea-ad-reward-icon{width:72px;height:72px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;font-size:38px;font-weight:900}
       .tdea-ad-reward-notice.success .tdea-ad-reward-icon{background:#e8f7ef;color:#168253}
       .tdea-ad-reward-notice.done .tdea-ad-reward-icon{background:#fff2dd;color:#b86a00}
@@ -27,7 +27,7 @@
       [data-direct-ad-reward][aria-busy="true"]{pointer-events:none;opacity:.62}
       @keyframes tdeaAdRewardFade{from{opacity:0}to{opacity:1}}
       @keyframes tdeaAdRewardPop{from{opacity:0;transform:scale(.92) translateY(10px)}to{opacity:1;transform:scale(1) translateY(0)}}
-      @media (prefers-reduced-motion:reduce){.tdea-ad-reward-notice,.tdea-ad-reward-card{animation:none}}
+      @media (prefers-reduced-motion:reduce){.tdea-ad-reward-notice,.tdea-ad-reward-notice-card{animation:none}}
     `;
     document.head.appendChild(style);
   }
@@ -46,8 +46,8 @@
     modal.setAttribute('aria-modal', 'true');
     modal.setAttribute('aria-label', title || '廣告贈點通知');
 
-    const card = document.createElement('div');
-    card.className = 'tdea-ad-reward-card';
+    const card = document.createElement('section');
+    card.className = 'tdea-ad-reward-notice-card';
 
     const icon = document.createElement('div');
     icon.className = 'tdea-ad-reward-icon';
@@ -112,43 +112,46 @@
     }
   }
 
-  function isAdRewardLink(link) {
-    if (!(link instanceof HTMLAnchorElement)) return false;
-    if (link.dataset.directAdReward === '1') return true;
-    if (isMarqueeUrl(link.getAttribute('href') || '')) return true;
-    const card = link.closest('.tdea-ad-card');
-    return Boolean(card && /廣告贈點/.test(link.textContent || ''));
+  function isAdRewardControl(control) {
+    if (!(control instanceof Element)) return false;
+    if (control.dataset.directAdReward === '1') return true;
+    if (control.matches('a[href]') && isMarqueeUrl(control.getAttribute('href') || '')) return true;
+    const card = control.closest('.tdea-ad-card');
+    return Boolean(card && /廣告贈點/.test(control.textContent || ''));
   }
 
-  function prepareLink(link) {
-    if (!isAdRewardLink(link)) return;
-    link.dataset.directAdReward = '1';
-    link.removeAttribute('target');
-    link.removeAttribute('rel');
-    link.setAttribute('href', '#direct-ad-reward');
-    link.textContent = '領取廣告贈點';
+  function prepareControl(control) {
+    if (!isAdRewardControl(control)) return;
+    control.dataset.directAdReward = '1';
+    if (control.matches('a')) {
+      control.removeAttribute('target');
+      control.removeAttribute('rel');
+      control.setAttribute('href', '#direct-ad-reward');
+    }
+    // 保留既有按鈕文字「開啟廣告贈點」，只改行為，不再導頁。
   }
 
   function prepareAll(root = document) {
-    root.querySelectorAll?.('a[href], a[data-direct-ad-reward]').forEach(prepareLink);
+    root.querySelectorAll?.('.tdea-ad-card a, .tdea-ad-card button, [data-direct-ad-reward]').forEach(prepareControl);
   }
 
-  async function requestReward(link) {
+  async function requestReward(control) {
     if (busy) return;
-    const card = link.closest('.tdea-ad-card');
+    const card = control.closest('.tdea-ad-card');
     const image = card?.querySelector('img');
-    const imageUrl = image?.currentSrc || image?.src || '';
-    const title = card?.querySelector('strong')?.textContent?.trim() || image?.alt?.trim() || 'TDEA 廣告贈點';
+    const imageUrl = control.dataset.imageUrl || image?.currentSrc || image?.src || '';
+    const imageId = control.dataset.imageId || '';
+    const title = control.dataset.adTitle || card?.querySelector('strong')?.textContent?.trim() || image?.alt?.trim() || 'TDEA 廣告贈點';
 
-    if (!imageUrl) {
-      showNotice({ type: 'error', title: '贈點未完成', message: '找不到這則廣告的圖片資料，請重新整理後再試。' });
+    if (!imageUrl && !imageId) {
+      showNotice({ type: 'error', title: '贈點未完成', message: '找不到這則廣告資料，請重新整理後再試。' });
       return;
     }
 
     busy = true;
-    link.setAttribute('aria-busy', 'true');
-    const originalText = link.textContent;
-    link.textContent = '贈點中...';
+    control.setAttribute('aria-busy', 'true');
+    const originalText = control.textContent;
+    control.textContent = '贈點中...';
 
     try {
       const headers = { 'content-type': 'application/json' };
@@ -159,11 +162,11 @@
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({ imageUrl, title }),
+        body: JSON.stringify({ imageUrl, imageId, title }),
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok || payload.success === false) {
-        throw new Error(payload.error || payload.message || '廣告贈點失敗');
+        throw new Error(payload.error || payload.message || `廣告贈點失敗（HTTP ${response.status}）`);
       }
 
       const data = payload.data || {};
@@ -173,7 +176,7 @@
       if (data.duplicate || data.awarded === false) {
         showNotice({
           type: 'done',
-          title: '今日已領取廣告贈點',
+          title: '今日已領取',
           message: '這則廣告今天的贈點已領取，不會重複贈點。',
           balance,
         });
@@ -182,9 +185,9 @@
 
       showNotice({
         type: 'success',
-        title: '贈點成功',
+        title: '廣告贈點成功',
         points: Number(data.points || 0),
-        message: `${title} 的廣告贈點已立即入帳。`,
+        message: '廣告贈點已立即入帳。',
         balance,
       });
     } catch (error) {
@@ -194,22 +197,22 @@
         message: error?.message || '廣告贈點失敗',
       });
     } finally {
-      link.removeAttribute('aria-busy');
-      link.textContent = originalText || '領取廣告贈點';
+      control.removeAttribute('aria-busy');
+      control.textContent = originalText || '開啟廣告贈點';
       busy = false;
     }
   }
 
   document.addEventListener('click', (event) => {
     const node = event.target instanceof Element ? event.target : null;
-    const link = node?.closest('a[data-direct-ad-reward], a[href]');
-    if (!isAdRewardLink(link)) return;
+    const control = node?.closest('[data-direct-ad-reward], .tdea-ad-card a, .tdea-ad-card button');
+    if (!isAdRewardControl(control)) return;
 
     event.preventDefault();
     event.stopPropagation();
     event.stopImmediatePropagation();
-    prepareLink(link);
-    requestReward(link);
+    prepareControl(control);
+    requestReward(control);
   }, true);
 
   prepareAll();
@@ -217,7 +220,7 @@
     for (const record of records) {
       record.addedNodes.forEach((node) => {
         if (!(node instanceof Element)) return;
-        if (node.matches?.('a[href], a[data-direct-ad-reward]')) prepareLink(node);
+        if (node.matches?.('.tdea-ad-card a, .tdea-ad-card button, [data-direct-ad-reward]')) prepareControl(node);
         prepareAll(node);
       });
     }
