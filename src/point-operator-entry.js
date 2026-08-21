@@ -28,29 +28,47 @@ async function currentSessionMember(request, env) {
 
 async function verifiedLineUserId(db, userId) {
   const row = await db.prepare(`
-    SELECT provider_subject AS line_user_id
-    FROM external_identities
-    WHERE platform_user_id = ?
-      AND provider = 'line_login'
-      AND verification_status = 'verified'
+    SELECT ei.provider_subject AS line_user_id
+    FROM external_identities ei
+    LEFT JOIN member_account_aliases maa ON maa.alias_user_id = ei.platform_user_id
+    WHERE ei.provider = 'line_login'
+      AND ei.verification_status = 'verified'
+      AND COALESCE(maa.canonical_user_id, ei.platform_user_id) = ?
+    ORDER BY COALESCE(ei.last_verified_at, ei.created_at) DESC
     LIMIT 1
   `).bind(userId).first();
   return String(row?.line_user_id || '').trim();
 }
 
-async function tdeaLoginAccess(env, lineUserId, displayName = '') {
-  if (!lineUserId || !env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== 'function') return false;
+function operatorMemberNo(member) {
+  return String(
+    member?.rosterMemberNumber ||
+    member?.companyMemberNumber ||
+    member?.memberNumber ||
+    ''
+  ).trim().toUpperCase();
+}
+
+async function tdeaLoginAccess(env, lineUserId, displayName = '', memberNo = '') {
+  if ((!lineUserId && !memberNo) || !env.TDEA_WORKER || typeof env.TDEA_WORKER.fetch !== 'function') return { allowed:false, matchedBy:'' };
   try {
     const response = await env.TDEA_WORKER.fetch('https://tdeawork.internal/api/admin-login/line', {
       method:'POST',
-      headers:{ 'content-type':'application/json', accept:'application/json' },
-      body:JSON.stringify({ lineUserId, displayName }),
+      headers:{
+        'content-type':'application/json',
+        accept:'application/json',
+        'x-tdea-source':'tdea-design-point-operator',
+      },
+      body:JSON.stringify({ lineUserId, displayName, memberNo }),
     });
     const payload = await response.json().catch(() => ({}));
-    return response.ok && payload?.success === true;
+    return {
+      allowed: response.ok && payload?.success === true,
+      matchedBy: String(payload?.data?.matchedBy || (response.ok ? 'lineUserId' : '')).trim(),
+    };
   } catch (error) {
     console.error('TDEA loginAccess lookup failed', error);
-    return false;
+    return { allowed:false, matchedBy:'' };
   }
 }
 
@@ -58,9 +76,11 @@ async function currentOperator(request, env) {
   const member = await currentSessionMember(request, env);
   if (!member) return null;
   const lineUserId = await verifiedLineUserId(env.DB, member.userId);
-  const loginAccess = await tdeaLoginAccess(env, lineUserId, member.displayName || '');
+  const memberNo = operatorMemberNo(member);
+  const access = await tdeaLoginAccess(env, lineUserId, member.displayName || '', memberNo);
+  const loginAccess = access.allowed === true;
   const adminAccess = { canAccessAdmin: loginAccess };
-  return { member, lineUserId, loginAccess, adminAccess };
+  return { member, memberNo, lineUserId, loginAccess, matchedBy:access.matchedBy || '', adminAccess };
 }
 
 function taipeiBusinessDate(now = new Date()) {
@@ -212,8 +232,10 @@ async function handlePointOperator(request, env) {
       operator:{
         userId:operator.member.userId,
         displayName:operator.member.displayName || '',
+        memberNo:operator.memberNo || '',
         lineUserId:operator.lineUserId || '',
         loginAccess:operator.loginAccess === true,
+        matchedBy:operator.matchedBy || '',
       },
     });
   }
