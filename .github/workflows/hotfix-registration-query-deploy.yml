@@ -19,9 +19,10 @@ jobs:
       - run: npm ci
       - run: node --check public/registration-query-restore.js
       - run: node --check public/daily-checkin-direct.js
+      - run: node --check src/remittance-entry.js
       - name: Deploy tdea-design
         run: npx wrangler deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-# deploy trigger: restore direct daily check-in popup
+# deploy trigger: daily check-in independent of ad campaign
