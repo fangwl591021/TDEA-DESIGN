@@ -101,6 +101,7 @@
     const node = event.target instanceof Element ? event.target : null;
     const target = node?.closest('button,a,[role="button"],[data-home-action],[data-home-inline],[data-daily-panel],[data-task-action],[data-register]');
     if (!target) return;
+    if (target.matches('[data-page="monitoring"]') || target.closest('[data-content="monitoring"]')) return;
     const described = describeTarget(target);
     sendEvent('click', {
       ...described,
@@ -114,7 +115,7 @@
 
   document.addEventListener('submit', (event) => {
     const form = event.target instanceof HTMLFormElement ? event.target : null;
-    if (!form) return;
+    if (!form || form.closest('[data-content="monitoring"]')) return;
     const submitter = event.submitter instanceof Element ? event.submitter : form.querySelector('[type="submit"]');
     const described = describeTarget(submitter || form);
     const formName = clean(form.getAttribute('aria-label') || form.id || form.name || '表單送出', 160);
@@ -162,7 +163,7 @@
       const response = await originalFetch(...args);
       const durationMs = Math.round(performance.now() - started);
       const url = new URL(requestUrl, location.origin);
-      if (url.origin === location.origin && url.pathname.startsWith('/v1/') && url.pathname !== TELEMETRY_URL) {
+      if (url.origin === location.origin && url.pathname.startsWith('/v1/') && url.pathname !== TELEMETRY_URL && url.pathname !== '/v1/admin/monitoring') {
         const action = `${method} ${url.pathname}`;
         const flow = flowCategory(action);
         if (!response.ok) {
@@ -191,7 +192,7 @@
       const durationMs = Math.round(performance.now() - started);
       try {
         const url = new URL(requestUrl || location.href, location.origin);
-        if (url.origin === location.origin && url.pathname !== TELEMETRY_URL) {
+        if (url.origin === location.origin && url.pathname !== TELEMETRY_URL && url.pathname !== '/v1/admin/monitoring') {
           const action = `${method} ${url.pathname}`;
           sendEvent('api_error', {
             action,
@@ -218,6 +219,17 @@
       label: clean(document.title || location.pathname, 240),
       metadata: { pageTitle: clean(document.title, 160) },
     });
+  }
+
+  if (location.pathname.startsWith('/admin')) {
+    let monitorRefreshTimer = null;
+    const refreshMonitorIfOpen = () => {
+      if (!document.querySelector('[data-content="monitoring"]')?.classList.contains('active')) return;
+      clearTimeout(monitorRefreshTimer);
+      monitorRefreshTimer = setTimeout(() => document.querySelector('#monitorRefresh')?.click(), 350);
+    };
+    window.addEventListener('tdea:usage-recorded', refreshMonitorIfOpen);
+    document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') refreshMonitorIfOpen(); });
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', recordEntry, { once: true });
