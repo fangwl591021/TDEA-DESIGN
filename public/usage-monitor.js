@@ -48,6 +48,12 @@
     return /auth|login|register|registration|course|activity|session|daily-checkin/i.test(path);
   }
 
+  function notifyRecorded(payload) {
+    try {
+      window.dispatchEvent(new CustomEvent('tdea:usage-recorded', { detail: { eventType: payload.eventType, action: payload.action, label: payload.label } }));
+    } catch {}
+  }
+
   function sendEvent(eventType, detail = {}) {
     const token = sessionToken();
     const payload = {
@@ -70,6 +76,8 @@
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
+      }).then((response) => {
+        if (response.ok) notifyRecorded(payload);
       }).catch(() => {});
     } catch {}
   }
