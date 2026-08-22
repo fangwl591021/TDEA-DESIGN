@@ -49,7 +49,7 @@
       ${progress}
       <div class="ops-actions">
         <button type="button" data-ops-registration-keys="${keys}" data-ops-registration-title="${esc(activity.title)}">查看報名名單</button>
-        ${activity.id ? `<a href="/admin?activity=${encodeURIComponent(activity.id)}">完整管理</a>` : '<a href="/admin">完整管理</a>'}
+        ${activity.id ? `<a href="/admin/?full=1&activity=${encodeURIComponent(activity.id)}">完整管理</a>` : '<a href="/admin/?full=1">完整管理</a>'}
       </div>
     </article>`;
   }
