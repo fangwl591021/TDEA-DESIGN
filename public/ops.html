@@ -5,13 +5,13 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
   <meta name="theme-color" content="#18352c">
   <title>TDEA 營運中心</title>
-  <link rel="stylesheet" href="/ops.css?v=20260822-1">
+  <link rel="stylesheet" href="/ops.css?v=20260822-2">
 </head>
 <body>
   <main id="opsApp" class="ops-shell">
     <header class="ops-topbar">
       <div>
-        <small>TDEA OPERATIONS</small>
+        <small>TDEA BACKOFFICE</small>
         <h1>營運中心</h1>
       </div>
       <a href="/" class="ops-home">會員中心</a>
@@ -19,21 +19,22 @@
 
     <section id="opsLoading" class="ops-loading">
       <div class="ops-spinner" aria-hidden="true"></div>
-      <strong>正在讀取目前活動…</strong>
-      <span>同步活動、報名與報到人數</span>
+      <strong>正在讀取 TDEA 後台…</strong>
+      <span>同步活動總覽的活動、報名與簽到數字</span>
     </section>
 
     <section id="opsContent" hidden>
-      <div class="ops-summary" aria-label="營運摘要">
-        <article><span>目前活動</span><strong id="opsActivityCount">0</strong><small>場</small></article>
-        <article><span>總報名</span><strong id="opsRegistrationCount">0</strong><small>人</small></article>
-        <article><span>已報到</span><strong id="opsCheckinCount">0</strong><small>人</small></article>
+      <div class="ops-summary" aria-label="TDEA 後台營運摘要">
+        <article><span>活動數</span><strong id="opsActivityCount">0</strong><small>場</small></article>
+        <article><span>上架中</span><strong id="opsLiveCount">0</strong><small>場</small></article>
+        <article><span>報名人數</span><strong id="opsRegistrationCount">0</strong><small>人</small></article>
+        <article><span>簽到人數</span><strong id="opsCheckinCount">0</strong><small>人</small></article>
       </div>
 
       <section class="ops-section-head">
         <div>
-          <small>LIVE ACTIVITIES</small>
-          <h2>目前活動</h2>
+          <small>TDEA ACTIVITIES</small>
+          <h2>活動清單</h2>
         </div>
         <button id="opsRefresh" type="button">重新整理</button>
       </section>
@@ -42,7 +43,7 @@
     </section>
 
     <section id="opsError" class="ops-error" hidden>
-      <strong>營運資料讀取失敗</strong>
+      <strong>TDEA 後台資料讀取失敗</strong>
       <p id="opsErrorMessage">請稍後再試。</p>
       <button id="opsRetry" type="button">重新載入</button>
       <a href="/">回會員中心</a>
@@ -53,13 +54,13 @@
     <div class="ops-sheet-backdrop" data-close-ops-sheet></div>
     <section class="ops-sheet-card" role="dialog" aria-modal="true" aria-labelledby="opsSheetTitle">
       <header>
-        <div><small>REGISTRATIONS</small><h2 id="opsSheetTitle">報名名單</h2></div>
+        <div><small>TDEA REGISTRATIONS</small><h2 id="opsSheetTitle">報名名單</h2></div>
         <button type="button" data-close-ops-sheet aria-label="關閉">×</button>
       </header>
       <div id="opsRegistrationBody" class="ops-registration-body"></div>
     </section>
   </div>
 
-  <script src="/ops.js?v=20260822-1"></script>
+  <script src="/ops.js?v=20260822-2"></script>
 </body>
 </html>

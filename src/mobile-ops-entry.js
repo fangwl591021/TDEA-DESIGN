@@ -48,12 +48,7 @@ async function readTdea(env, path, label, timeoutMs = 3200) {
 }
 
 async function readActivities(env) {
-  try {
-    return await readTdea(env, '/api/activities', 'activities', 2600);
-  } catch (primaryError) {
-    console.warn('Mobile ops activities fallback', { error: String(primaryError) });
-    return readTdea(env, '/api/manager-data', 'manager-data', 4200);
-  }
+  return readTdea(env, '/api/activities', 'tdea activities', 3600);
 }
 
 function activityRows(payload) {
@@ -61,14 +56,22 @@ function activityRows(payload) {
     ? payload.data.activities
     : Array.isArray(payload?.activities)
       ? payload.activities
-      : [];
-  const active = rows.filter((row) => {
-    const status = clean(row?.status, 40).toLowerCase();
-    if (!status) return true;
-    return ['上架', 'published', 'active', 'open', '進行中'].includes(status);
-  });
-  return (active.length ? active : rows.filter((row) => !['封存', 'archived'].includes(clean(row?.status, 40).toLowerCase())))
-    .slice(0, 20);
+      : Array.isArray(payload?.data)
+        ? payload.data
+        : [];
+
+  return rows
+    .filter((row) => {
+      const status = clean(row?.status || row?.['狀態'], 40).toLowerCase();
+      if (row?.archived === true || row?.deleted === true || clean(row?.deletedAt, 80)) return false;
+      return !['已封存', '封存', 'archived'].includes(status);
+    })
+    .slice(0, 50);
+}
+
+function isLiveActivity(activity) {
+  const status = clean(activity?.status || activity?.['狀態'], 40).toLowerCase();
+  return status === '上架' || ['published', 'active', 'open', '進行中'].includes(status);
 }
 
 function registrationKeys(activity) {
@@ -90,7 +93,7 @@ function registrationKeys(activity) {
 async function registrationRows(env, keys) {
   if (!keys.length) return [];
   const query = keys.map(encodeURIComponent).join(',');
-  const payload = await readTdea(env, `/api/registrations/list?keys=${query}`, 'registrations', 3600);
+  const payload = await readTdea(env, `/api/registrations/list?keys=${query}`, 'tdea registrations', 4200);
   return Array.isArray(payload?.data) ? payload.data : [];
 }
 
@@ -100,10 +103,11 @@ function checkedIn(row) {
   return /已完成|已報到|已簽到|已核銷/.test(text);
 }
 
-function activityView(activity, rows = [], degraded = false) {
+function activityView(activity) {
   const capacity = Math.max(0, Number(activity?.capacity) || 0);
-  const registered = rows.length;
-  const checked = rows.filter(checkedIn).length;
+  // 完全沿用 TDEA 後台活動總覽的統計欄位：reg / check。
+  const registered = Math.max(0, Number(activity?.reg) || 0);
+  const checked = Math.max(0, Number(activity?.check) || 0);
   return {
     id: clean(activity?.id, 180),
     activityNo: clean(activity?.activityNo, 100),
@@ -111,32 +115,30 @@ function activityView(activity, rows = [], degraded = false) {
     type: clean(activity?.typeLabel || activity?.type, 80),
     courseTime: clean(activity?.courseTime, 160),
     deadline: clean(activity?.deadline, 160),
-    status: clean(activity?.status || '上架', 40),
+    status: clean(activity?.status || '未設定', 40),
+    live: isLiveActivity(activity),
     capacity,
     registered,
     checkedIn: checked,
     remaining: capacity ? Math.max(0, capacity - registered) : null,
     registrationRate: capacity ? Math.min(100, Math.round((registered / capacity) * 100)) : null,
     keys: registrationKeys(activity),
-    degraded,
+    source: 'tdeawork',
   };
 }
 
 async function opsDashboard(env) {
   const activitiesPayload = await readActivities(env);
   const activities = activityRows(activitiesPayload);
-  const registrationResults = await Promise.allSettled(
-    activities.map((activity) => registrationRows(env, registrationKeys(activity))),
-  );
-  const views = activities.map((activity, index) => {
-    const result = registrationResults[index];
-    return activityView(activity, result?.status === 'fulfilled' ? result.value : [], result?.status !== 'fulfilled');
-  });
+  const views = activities.map(activityView);
   return {
     success: true,
+    source: 'tdeawork:/api/activities',
     generatedAt: new Date().toISOString(),
     summary: {
+      // 與 TDEA 後台 dashboard() 完全一致：activities.length / 上架 / reg / check。
       activities: views.length,
+      live: views.filter((item) => item.live).length,
       registrations: views.reduce((sum, item) => sum + item.registered, 0),
       checkedIn: views.reduce((sum, item) => sum + item.checkedIn, 0),
     },
@@ -217,12 +219,13 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname === '/v1/ops-dashboard') {
+      // TDEA-DESIGN 只負責登入權限；以下營運數字全部取自 tdeawork。
       if (!await requireAdmin(request, env, ctx)) return json({ success: false, error: '沒有營運管理權限' }, 403);
       try {
         return json(await opsDashboard(env));
       } catch (error) {
         console.error('Mobile ops dashboard failed', { error: String(error) });
-        return json({ success: false, error: '營運資料暫時無法讀取' }, 502);
+        return json({ success: false, error: 'TDEA 後台營運資料暫時無法讀取' }, 502);
       }
     }
 
@@ -236,10 +239,10 @@ export default {
       if (!keys.length) return json({ success: false, error: '缺少活動識別資料' }, 400);
       try {
         const rows = await registrationRows(env, keys);
-        return json({ success: true, total: rows.length, data: rows.map(registrationView) });
+        return json({ success: true, source: 'tdeawork:/api/registrations/list', total: rows.length, data: rows.map(registrationView) });
       } catch (error) {
         console.error('Mobile ops registrations failed', { error: String(error) });
-        return json({ success: false, error: '報名名單暫時無法讀取' }, 502);
+        return json({ success: false, error: 'TDEA 後台報名名單暫時無法讀取' }, 502);
       }
     }
 
