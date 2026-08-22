@@ -8,5 +8,40 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="/vendor/cropper.min.js"></script>
 </head>
-<body><main id="app"><section id="loading" class="center">載入會員中心…</section></main><script src="/daily-checkin-direct.js?v=20260821-2"></script><script src="/critical-flow-bootstrap-monitor.js?v=20260821-2"></script><script src="/activity-trace-bridge.js?v=20260821-1"></script><script src="/ad-reward-direct-v3.js?v=20260822-1"></script><script src="/ops-entry-direct.js?v=20260822-1"></script><script type="module" src="/app-20260803-123.js?v=20260822-149"></script><script src="/point-operator-scan.js?v=20260821-open2" defer></script><script src="/registration-query-restore.js?v=20260818-4" defer></script><script src="/usage-monitor.js?v=20260821-4" defer></script></body>
+<body><main id="app"><section id="loading" class="center">載入會員中心…</section></main><script src="/daily-checkin-direct.js?v=20260821-2"></script><script src="/critical-flow-bootstrap-monitor.js?v=20260821-2"></script><script src="/activity-trace-bridge.js?v=20260821-1"></script><script src="/ad-reward-direct-v3.js?v=20260822-1"></script><script src="/ops-entry-direct.js?v=20260822-1"></script><script type="module" src="/app-20260803-123.js?v=20260822-149"></script><script>
+(() => {
+  const isOpsEntry = (node) => {
+    if (!(node instanceof Element)) return false;
+    const control = node.closest('a,button');
+    if (!control) return false;
+    const text = String(control.textContent || '').replace(/\s+/g, '');
+    const href = control.matches('a') ? String(control.getAttribute('href') || '') : '';
+    return text.includes('營運管理後台') || control.dataset.opsEntry === '1' || /\/admin\/?(?:$|[?#])/.test(href);
+  };
+  const patch = (root = document) => {
+    root.querySelectorAll?.('a').forEach((anchor) => {
+      const text = String(anchor.textContent || '').replace(/\s+/g, '');
+      const href = String(anchor.getAttribute('href') || '');
+      if (text.includes('營運管理後台') || (/\/admin\/?(?:$|[?#])/.test(href) && anchor.classList.contains('alt'))) {
+        anchor.dataset.opsEntry = '1';
+        anchor.setAttribute('href', '/ops');
+        anchor.removeAttribute('target');
+        anchor.removeAttribute('rel');
+      }
+    });
+  };
+  document.addEventListener('click', (event) => {
+    if (!isOpsEntry(event.target)) return;
+    const control = event.target.closest('a,button');
+    const text = String(control?.textContent || '').replace(/\s+/g, '');
+    if (!text.includes('營運管理後台') && control?.dataset.opsEntry !== '1') return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    location.href = '/ops';
+  }, true);
+  new MutationObserver(() => patch()).observe(document.documentElement, { childList: true, subtree: true });
+  patch();
+})();
+</script><script src="/point-operator-scan.js?v=20260821-open2" defer></script><script src="/registration-query-restore.js?v=20260818-4" defer></script><script src="/usage-monitor.js?v=20260821-4" defer></script></body>
 </html>
