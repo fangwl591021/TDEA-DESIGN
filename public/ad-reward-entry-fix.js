@@ -149,22 +149,6 @@
     neutralizeNavigation(control);
     cleanupLegacyHash();
 
-    const card = control.closest('.tdea-ad-card');
-    const image = card?.querySelector('img');
-    const imageUrl = control.dataset.imageUrl || image?.currentSrc || image?.src || '';
-    const imageId = control.dataset.imageId || '';
-    const adTitle = control.dataset.adTitle || card?.querySelector('strong')?.textContent?.trim() || image?.alt?.trim() || 'TDEA 廣告贈點';
-
-    if (!imageUrl && !imageId) {
-      showNotice({
-        type: 'error',
-        title: '贈點未完成',
-        message: '找不到這則廣告資料，請重新整理後再試。',
-        buttonText: '關閉',
-      });
-      return;
-    }
-
     busy = true;
     const originalDisabled = Boolean(control.disabled);
     control.disabled = true;
@@ -172,19 +156,21 @@
     control.setAttribute('aria-busy', 'true');
 
     try {
-      const result = await requestJson('/v1/ad-reward', {
+      // 廣告贈點改與「每日簽到」共用同一套一次性贈點流程：
+      // 同一會員每天只會成功領取一次，重複點擊由後端冪等判斷，不另開廣告 LIFF 頁。
+      const result = await requestJson('/v1/daily-checkin', {
         method: 'POST',
-        body: JSON.stringify({ imageUrl, imageId, title: adTitle }),
+        body: '{}',
       });
       const data = result?.data || {};
       const balance = Number(data.balance);
       updateVisibleBalance(balance);
 
-      if (data.duplicate || data.awarded === false) {
+      if (data.alreadyChecked || data.duplicate || data.awarded === false) {
         showNotice({
           type: 'done',
           title: '今日已領取廣告贈點',
-          message: '這則廣告今天的贈點已領取，不會重複贈點。\n請明天再來。',
+          message: '今天的廣告贈點已領取，不會重複贈點。\n請明天再來。',
           balance,
           buttonText: '知道了',
         });
@@ -195,7 +181,7 @@
         type: 'success',
         title: '廣告贈點成功',
         points: Number(data.points || 0),
-        message: '廣告贈點獎勵已立即入帳。',
+        message: '今日廣告贈點已立即入帳。',
         balance,
         buttonText: '我知道了',
       });
