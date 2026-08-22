@@ -39,15 +39,14 @@
           <h3>${esc(activity.title)}</h3>
           <p>${esc(detail || activity.type || '活動時間未設定')}</p>
         </div>
-        <span class="ops-status">${esc(activity.status || '上架')}</span>
+        <span class="ops-status">${esc(activity.status || '未設定')}</span>
       </div>
       <div class="ops-metrics">
-        <div><span>報名</span><strong>${format(activity.registered)}</strong></div>
+        <div><span>報名人數</span><strong>${format(activity.registered)}</strong></div>
         <div><span>容量</span><strong>${capacityText}</strong></div>
-        <div><span>已報到</span><strong>${format(activity.checkedIn)}</strong></div>
+        <div><span>簽到人數</span><strong>${format(activity.checkedIn)}</strong></div>
       </div>
       ${progress}
-      ${activity.degraded ? '<div class="ops-degraded">報名名單同步暫時較慢，數字可能稍後更新。</div>' : ''}
       <div class="ops-actions">
         <button type="button" data-ops-registration-keys="${keys}" data-ops-registration-title="${esc(activity.title)}">查看報名名單</button>
         ${activity.id ? `<a href="/admin?activity=${encodeURIComponent(activity.id)}">完整管理</a>` : '<a href="/admin">完整管理</a>'}
@@ -64,7 +63,7 @@
     const keys = decodeURIComponent(button.dataset.opsRegistrationKeys || '');
     const title = button.dataset.opsRegistrationTitle || '報名名單';
     $('#opsSheetTitle').textContent = title;
-    $('#opsRegistrationBody').innerHTML = '<div class="ops-sheet-loading">正在讀取報名名單…</div>';
+    $('#opsRegistrationBody').innerHTML = '<div class="ops-sheet-loading">正在讀取 TDEA 後台報名名單…</div>';
     $('#opsRegistrations').hidden = false;
     document.body.style.overflow = 'hidden';
     try {
@@ -76,8 +75,8 @@
             <strong>${esc(row.name || '未填姓名')}</strong>
             <small>${esc([row.memberNo, row.phone, row.submittedAt ? `報名 ${formatTime(row.submittedAt)}` : ''].filter(Boolean).join('｜'))}</small>
           </div>
-          <span class="ops-registration-state ${row.checkedIn ? 'done' : ''}">${row.checkedIn ? '已報到' : '未報到'}</span>
-        </article>`).join('') : '<div class="ops-sheet-empty">目前沒有報名資料。</div>';
+          <span class="ops-registration-state ${row.checkedIn ? 'done' : ''}">${row.checkedIn ? '已簽到' : '未簽到'}</span>
+        </article>`).join('') : '<div class="ops-sheet-empty">TDEA 後台目前沒有報名資料。</div>';
     } catch (error) {
       $('#opsRegistrationBody').innerHTML = `<div class="ops-sheet-empty">${esc(error.message || '報名名單讀取失敗')}</div>`;
     }
@@ -96,20 +95,21 @@
     try {
       const data = await api('/v1/ops-dashboard');
       $('#opsActivityCount').textContent = format(data.summary?.activities);
+      $('#opsLiveCount').textContent = format(data.summary?.live);
       $('#opsRegistrationCount').textContent = format(data.summary?.registrations);
       $('#opsCheckinCount').textContent = format(data.summary?.checkedIn);
       const activities = Array.isArray(data.activities) ? data.activities : [];
       $('#opsActivityList').innerHTML = activities.length
         ? activities.map(activityCard).join('')
-        : '<div class="ops-empty">目前沒有上架中的活動。</div>';
-      $('#opsUpdatedAt').textContent = `最後更新：${formatTime(data.generatedAt)}`;
+        : '<div class="ops-empty">TDEA 後台目前沒有活動。</div>';
+      $('#opsUpdatedAt').textContent = `TDEA 後台資料 · 最後更新：${formatTime(data.generatedAt)}`;
       bindActivityButtons();
       $('#opsLoading').hidden = true;
       $('#opsContent').hidden = false;
     } catch (error) {
       $('#opsLoading').hidden = true;
       $('#opsError').hidden = false;
-      $('#opsErrorMessage').textContent = error.message || '營運資料暫時無法讀取';
+      $('#opsErrorMessage').textContent = error.message || 'TDEA 後台營運資料暫時無法讀取';
     }
   }
 
