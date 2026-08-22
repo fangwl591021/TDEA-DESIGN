@@ -47,6 +47,15 @@ async function readTdea(env, path, label, timeoutMs = 3200) {
   return payload;
 }
 
+async function readActivities(env) {
+  try {
+    return await readTdea(env, '/api/activities', 'activities', 2600);
+  } catch (primaryError) {
+    console.warn('Mobile ops activities fallback', { error: String(primaryError) });
+    return readTdea(env, '/api/manager-data', 'manager-data', 4200);
+  }
+}
+
 function activityRows(payload) {
   const rows = Array.isArray(payload?.data?.activities)
     ? payload.data.activities
@@ -114,7 +123,7 @@ function activityView(activity, rows = [], degraded = false) {
 }
 
 async function opsDashboard(env) {
-  const activitiesPayload = await readTdea(env, '/api/activities', 'activities');
+  const activitiesPayload = await readActivities(env);
   const activities = activityRows(activitiesPayload);
   const registrationResults = await Promise.allSettled(
     activities.map((activity) => registrationRows(env, registrationKeys(activity))),
