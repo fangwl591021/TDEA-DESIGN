@@ -1,0 +1,7 @@
+time=2026-08-22T05:37:23Z
+source_branch=agent/full-project-transplant
+exit_code=1
+--- wrangler output ---
+Wrangler requires at least Node.js v22.0.0. You are using v20.20.2. Please update your version of Node.js.
+
+Consider using a Node.js version manager such as https://volta.sh/ or https://github.com/nvm-sh/nvm.
