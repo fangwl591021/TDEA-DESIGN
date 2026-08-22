@@ -8,7 +8,133 @@
   <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
   <script src="/vendor/cropper.min.js"></script>
 </head>
-<body><main id="app"><section id="loading" class="center">載入會員中心…</section></main><script src="/daily-checkin-direct.js?v=20260821-2"></script><script src="/critical-flow-bootstrap-monitor.js?v=20260821-2"></script><script src="/activity-trace-bridge.js?v=20260821-1"></script><script src="/ad-reward-direct-v3.js?v=20260822-3"></script><script src="/ad-reward-button-ensure-v4.js?v=20260822-1"></script><script src="/ops-entry-direct.js?v=20260822-1"></script><script type="module" src="/app-20260803-123.js?v=20260822-150"></script><script>
+<body><main id="app"><section id="loading" class="center">載入會員中心…</section></main><script src="/daily-checkin-direct.js?v=20260821-2"></script><script src="/critical-flow-bootstrap-monitor.js?v=20260821-2"></script><script src="/activity-trace-bridge.js?v=20260821-1"></script><script src="/ad-reward-direct-v3.js?v=20260822-3"></script><script>
+(() => {
+  if (window.__tdeaInlineAdRewardV5Installed) return;
+  window.__tdeaInlineAdRewardV5Installed = true;
+
+  const CONFIG_URL = 'https://tdeawork.fangwl591021.workers.dev/api/marquee';
+  let enabled = true;
+  let label = '點我贈點';
+  let points = 1;
+  let busy = false;
+
+  const token = () => localStorage.getItem('klinkweb_session') || '';
+  const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]));
+
+  function ensureStyle() {
+    if (document.getElementById('tdea-inline-ad-reward-v5-style')) return;
+    const style = document.createElement('style');
+    style.id = 'tdea-inline-ad-reward-v5-style';
+    style.textContent = `
+      .tdea-ad-card [data-direct-ad-reward]{width:100%;min-height:52px;margin-top:10px;border:0;border-radius:10px;background:#c65320;color:#fff;font:800 16px/1.2 system-ui,-apple-system,"Noto Sans TC",sans-serif;cursor:pointer}
+      .tdea-ad-card [data-direct-ad-reward][disabled]{opacity:.6;cursor:wait}
+      .tdea-inline-reward-notice{position:fixed;inset:0;z-index:99999;display:grid;place-items:center;padding:24px;background:rgba(39,24,18,.48);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+      .tdea-inline-reward-card{width:min(352px,calc(100vw - 40px));padding:28px 24px 22px;border:1px solid #f1d5c8;border-radius:26px;background:#fffaf7;text-align:center;box-shadow:0 24px 64px rgba(80,38,20,.24);font-family:system-ui,-apple-system,"Noto Sans TC",sans-serif}
+      .tdea-inline-reward-icon{width:72px;height:72px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;font-size:38px;font-weight:900;background:#e8f7ef;color:#168253}
+      .tdea-inline-reward-notice.done .tdea-inline-reward-icon{background:#fff2dd;color:#b86a00}
+      .tdea-inline-reward-notice.error .tdea-inline-reward-icon{background:#feeceb;color:#c64840}
+      .tdea-inline-reward-card h2{margin:0;color:#4a2b20;font-size:22px}
+      .tdea-inline-reward-points{margin-top:14px;color:#168253;font-size:42px;font-weight:900}
+      .tdea-inline-reward-card p{margin:14px 0 0;color:#7d6256;font-size:15px;line-height:1.65;white-space:pre-line}
+      .tdea-inline-reward-balance{margin-top:16px;padding:13px 16px;border-radius:14px;background:#fff1e8;color:#8e6756}
+      .tdea-inline-reward-close{width:100%;height:50px;margin-top:22px;border:0;border-radius:15px;background:#bd4f1d;color:#fff;font-size:16px;font-weight:800}
+    `;
+    document.head.appendChild(style);
+  }
+
+  function showNotice({type='success', title='', awardedPoints=null, message='', balance=null}) {
+    ensureStyle();
+    document.querySelector('.tdea-inline-reward-notice')?.remove();
+    const wrap = document.createElement('div');
+    wrap.className = `tdea-inline-reward-notice ${type}`;
+    wrap.innerHTML = `<div class="tdea-inline-reward-card"><div class="tdea-inline-reward-icon">${type === 'error' ? '!' : '✓'}</div><h2>${esc(title)}</h2>${awardedPoints === null ? '' : `<div class="tdea-inline-reward-points">+${Number(awardedPoints)||0} 點</div>`}<p>${esc(message)}</p>${Number.isFinite(Number(balance)) ? `<div class="tdea-inline-reward-balance">目前點數 <strong>${new Intl.NumberFormat('zh-TW').format(Number(balance))} 點</strong></div>` : ''}<button type="button" class="tdea-inline-reward-close">我知道了</button></div>`;
+    wrap.querySelector('.tdea-inline-reward-close')?.addEventListener('click', () => wrap.remove());
+    wrap.addEventListener('click', (e) => { if (e.target === wrap) wrap.remove(); });
+    document.body.appendChild(wrap);
+  }
+
+  function hostOf(card) {
+    return Array.from(card.children || []).find((node) => node instanceof HTMLDivElement) || card;
+  }
+
+  function syncCard(card) {
+    if (!(card instanceof Element) || !card.matches('.tdea-ad-card')) return;
+    card.querySelectorAll('a.btn').forEach((anchor) => {
+      if (/廣告贈點|贈點/.test(String(anchor.textContent || ''))) anchor.remove();
+    });
+    let button = card.querySelector('[data-direct-ad-reward]');
+    if (!enabled) { button?.remove(); return; }
+    const copy = card.querySelector('span');
+    if (copy) copy.textContent = `點擊廣告每日可獲 ${points} 點`;
+    if (!button) {
+      button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.directAdReward = '1';
+      hostOf(card).appendChild(button);
+    }
+    button.textContent = label;
+    button.type = 'button';
+  }
+
+  function sweep(root = document) {
+    if (root instanceof Element && root.matches('.tdea-ad-card')) syncCard(root);
+    root.querySelectorAll?.('.tdea-ad-card').forEach(syncCard);
+  }
+
+  async function directReward(button) {
+    if (busy) return;
+    busy = true;
+    button.disabled = true;
+    try {
+      const headers = {'content-type':'application/json'};
+      if (token()) headers.authorization = `Bearer ${token()}`;
+      const response = await fetch('/v1/daily-checkin', {method:'POST',headers,body:'{}',credentials:'same-origin',cache:'no-store'});
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || payload.success === false) throw new Error(payload.error || payload.message || '贈點失敗');
+      const data = payload.data || {};
+      if (data.alreadyChecked || data.duplicate || data.awarded === false) {
+        showNotice({type:'done',title:'今日已完成贈點',message:'今天的贈點已領取，不會重複贈點。\n請明天再來。',balance:data.balance});
+      } else {
+        showNotice({title:'贈點成功',awardedPoints:Number(data.points || points || 0),message:'今日贈點已立即入帳。',balance:data.balance});
+      }
+    } catch (error) {
+      showNotice({type:'error',title:'贈點未完成',message:error?.message || '贈點失敗'});
+    } finally {
+      button.disabled = false;
+      busy = false;
+    }
+  }
+
+  document.addEventListener('click', (event) => {
+    const target = event.target instanceof Element ? event.target.closest('[data-direct-ad-reward]') : null;
+    if (!target) return;
+    event.preventDefault();
+    event.stopPropagation();
+    // 若 V3 已先接手，這裡通常不會執行；若 V3 未載入則由本段保底。
+    directReward(target);
+  }, true);
+
+  new MutationObserver((records) => {
+    for (const record of records) for (const node of record.addedNodes) if (node instanceof Element) sweep(node);
+  }).observe(document.documentElement, {childList:true,subtree:true});
+
+  ensureStyle();
+  sweep();
+  fetch(`${CONFIG_URL}?_=${Date.now()}`, {cache:'no-store',credentials:'omit'})
+    .then((r) => r.json())
+    .then((payload) => {
+      const left = payload?.data?.left || {};
+      enabled = left.enabled !== false;
+      const nextLabel = String(left.label || '').trim();
+      if (nextLabel) label = nextLabel;
+      const nextPoints = Number(left.points);
+      if (Number.isFinite(nextPoints) && nextPoints > 0) points = Math.round(nextPoints);
+      sweep();
+    })
+    .catch(() => sweep());
+})();
+</script><script src="/ops-entry-direct.js?v=20260822-1"></script><script type="module" src="/app-20260803-123.js?v=20260822-151"></script><script>
 (() => {
   const textOf = (node) => String(node?.textContent || '').replace(/\s+/g, '');
   const patch = (root = document) => {
