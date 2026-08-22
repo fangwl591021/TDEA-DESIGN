@@ -16,7 +16,7 @@ jobs:
           ref: agent/full-project-transplant
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       - run: node --check public/daily-checkin-direct.js
@@ -61,4 +61,4 @@ jobs:
       - name: Fail workflow if deployment failed
         if: steps.deploy.outputs.exit_code != '0'
         run: exit 1
-# diagnostic trigger 2026-08-22 13:34 +08
+# diagnostic trigger 2026-08-22 13:38 +08 node22
