@@ -17,6 +17,21 @@ function withTimeout(promise, ms, label) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
+function isMobileClient(request) {
+  const ua = clean(request.headers.get('user-agent'), 1200);
+  return /Android|iPhone|iPad|iPod|Mobile|Line\//i.test(ua);
+}
+
+function mobileAdminRedirect(request) {
+  if (request.method !== 'GET') return null;
+  const url = new URL(request.url);
+  if (!['/admin', '/admin/', '/admin.html'].includes(url.pathname)) return null;
+  if (url.searchParams.get('full') === '1') return null;
+  if (!isMobileClient(request)) return null;
+  const target = new URL('/ops', url.origin);
+  return Response.redirect(target.toString(), 302);
+}
+
 async function requireAdmin(request, env, ctx) {
   const url = new URL(request.url);
   url.pathname = '/v1/admin/overview';
@@ -105,7 +120,6 @@ function checkedIn(row) {
 
 function activityView(activity) {
   const capacity = Math.max(0, Number(activity?.capacity) || 0);
-  // 完全沿用 TDEA 後台活動總覽的統計欄位：reg / check。
   const registered = Math.max(0, Number(activity?.reg) || 0);
   const checked = Math.max(0, Number(activity?.check) || 0);
   return {
@@ -136,7 +150,6 @@ async function opsDashboard(env) {
     source: 'tdeawork:/api/activities',
     generatedAt: new Date().toISOString(),
     summary: {
-      // 與 TDEA 後台 dashboard() 完全一致：activities.length / 上架 / reg / check。
       activities: views.length,
       live: views.filter((item) => item.live).length,
       registrations: views.reduce((sum, item) => sum + item.registered, 0),
@@ -207,6 +220,9 @@ async function patchMainApp(request, env, ctx) {
 
 export default {
   async fetch(request, env, ctx) {
+    const adminRedirect = mobileAdminRedirect(request);
+    if (adminRedirect) return adminRedirect;
+
     const url = new URL(request.url);
 
     if (request.method === 'GET' && url.pathname === '/app-20260803-123.js') {
@@ -219,7 +235,6 @@ export default {
     }
 
     if (request.method === 'GET' && url.pathname === '/v1/ops-dashboard') {
-      // TDEA-DESIGN 只負責登入權限；以下營運數字全部取自 tdeawork。
       if (!await requireAdmin(request, env, ctx)) return json({ success: false, error: '沒有營運管理權限' }, 403);
       try {
         return json(await opsDashboard(env));
