@@ -6,7 +6,7 @@ on:
     paths:
       - '.github/workflows/deploy-agent-now.yml'
 permissions:
-  contents: read
+  contents: write
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -21,10 +21,44 @@ jobs:
       - run: npm ci
       - run: node --check public/daily-checkin-direct.js
       - run: node --check public/ad-reward-direct-v3.js
+      - run: node --check src/ad-reward-no-link-entry.js
       - run: node --check src/remittance-entry.js
-      - name: Deploy tdea-design
-        run: npx wrangler deploy
+      - name: Deploy tdea-design and capture result
+        id: deploy
+        shell: bash
+        run: |
+          set +e
+          npx wrangler deploy > /tmp/tdea-deploy.log 2>&1
+          code=$?
+          cat /tmp/tdea-deploy.log
+          echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+          exit 0
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-# trigger deploy 2026-08-22 13:18 +08 ad-reward-v3
+      - name: Checkout main for status writeback
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: status-repo
+      - name: Write deploy status back to repository
+        shell: bash
+        run: |
+          cd status-repo
+          mkdir -p .deploy-status
+          {
+            echo "time=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "source_branch=agent/full-project-transplant"
+            echo "exit_code=${{ steps.deploy.outputs.exit_code }}"
+            echo "--- wrangler output ---"
+            cat /tmp/tdea-deploy.log
+          } > .deploy-status/latest.txt
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .deploy-status/latest.txt
+          git commit -m "Record TDEA deploy result [skip ci]" || true
+          git push origin HEAD:main
+      - name: Fail workflow if deployment failed
+        if: steps.deploy.outputs.exit_code != '0'
+        run: exit 1
+# diagnostic trigger 2026-08-22 13:34 +08
